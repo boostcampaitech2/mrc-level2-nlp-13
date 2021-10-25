@@ -221,6 +221,10 @@ def run_mrc(
             load_from_cache_file=not data_args.overwrite_cache,
         )
 
+        # print("Here!:\t", train_dataset['input_ids'][0])
+        # print("Decode!:\t", tokenizer.decode(train_dataset['input_ids'][0]))
+        # exit(0)
+
     # Validation preprocessing
     def prepare_validation_features(examples):
         # truncation과 padding(length가 짧을때만)을 통해 toknization을 진행하며, stride를 이용하여 overflow를 유지합니다.
