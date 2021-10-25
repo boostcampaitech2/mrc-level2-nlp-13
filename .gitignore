@@ -2,3 +2,11 @@
 
 # 파이썬 가상 환경
 .venv_mrc/
+
+# 모델 결과
+models/
+outputs/
+nohup.outputs
+
+# 데이터
+data/
