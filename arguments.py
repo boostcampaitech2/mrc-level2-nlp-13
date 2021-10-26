@@ -9,7 +9,7 @@ class ModelArguments:
     """
 
     model_name_or_path: str = field(
-        default="monologg/kobigbird-bert-base",
+        default="klue/roberta-large",
         metadata={
             "help": "Path to pretrained model or model identifier from huggingface.co/models"
         },
@@ -113,13 +113,13 @@ class CustomArguments:
         },
     )
     wandb_run_name: str = field(
-        default="test",
+        default="Roberta-large_v0.1",
         metadata={
             "help": "run name in WandB E.g. Bart_v0.1, Roberta_v0.1, DPR_Bert_v0.1"
         },
     )
     description: str = field(
-        default="나는 애기 강민 응애",
+        default="Roberta-large epoch 10",
         metadata={
             "help": "Explain your specific experiments settings"
         },
@@ -127,7 +127,7 @@ class CustomArguments:
 
     # Training
     epochs: int = field(
-        default = 1,
+        default = 10,
         metadata={
             "help": "Training epoch"
         },
@@ -139,13 +139,13 @@ class CustomArguments:
         },
     )
     train_batch_size: int = field(
-        default = 32,
+        default = 16,
         metadata={
             "help": "Training batch size"
         },
     )
     valid_batch_size: int = field(
-        default = 32,
+        default = 16,
         metadata={
             "help": "Validation batch size"
         },
