@@ -26,7 +26,11 @@ from retrieval import SparseRetrieval
 from arguments import (
     ModelArguments,
     DataTrainingArguments,
+    CustomArguments,
 )
+
+import wandb
+from utills.config_setting import config_setting
 
 logger = logging.getLogger(__name__)
 
@@ -35,9 +39,9 @@ def main():
     # --help flag 를 실행시켜서 확인할 수 도 있습니다.
 
     parser = HfArgumentParser(
-        (ModelArguments, DataTrainingArguments, TrainingArguments)
+        (ModelArguments, DataTrainingArguments, TrainingArguments, CustomArguments)
     )
-    model_args, data_args, training_args = parser.parse_args_into_dataclasses()
+    model_args, data_args, training_args, custom_args = parser.parse_args_into_dataclasses()
     print(model_args.model_name_or_path)
 
     # [참고] argument를 manual하게 수정하고 싶은 경우에 아래와 같은 방식을 사용할 수 있습니다
@@ -89,24 +93,30 @@ def main():
         type(training_args),
         type(model_args),
         type(datasets),
+        type(custom_args),
         type(tokenizer),
         type(model),
     )
 
     # do_train mrc model 혹은 do_eval mrc model
     if training_args.do_train or training_args.do_eval:
-        run_mrc(data_args, training_args, model_args, datasets, tokenizer, model)
-
+        run_mrc(data_args, training_args, model_args, custom_args, datasets, tokenizer, model)
 
 def run_mrc(
     data_args: DataTrainingArguments,
     training_args: TrainingArguments,
     model_args: ModelArguments,
+    custom_args: CustomArguments, # add
     datasets: DatasetDict,
     tokenizer,
     model,
 ) -> NoReturn:
 
+    # Wandb 설정
+    if custom_args.use_wandb:
+        config = config_setting(data_args, training_args, model_args, custom_args)
+        wandb.init(project=custom_args.project_name, entity=custom_args.entity_name, name=custom_args.wandb_run_name, config=config)
+        
     # dataset을 전처리합니다.
     # training과 evaluation에서 사용되는 전처리는 아주 조금 다른 형태를 가집니다.
     if training_args.do_train:
@@ -313,9 +323,12 @@ def run_mrc(
         return metric.compute(predictions=p.predictions, references=p.label_ids)
 
     # Trainer 초기화
-    training_args.num_train_epochs = 6
+    if custom_args.use_wandb:
+        wandb.watch(model)
     trainer = QuestionAnsweringTrainer( 
         model=model,
+        custom_args=custom_args,
+        model_tokenizer=tokenizer,
         args=training_args,
         train_dataset=train_dataset if training_args.do_train else None,
         eval_dataset=eval_dataset if training_args.do_eval else None,

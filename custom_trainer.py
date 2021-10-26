@@ -191,10 +191,14 @@ SCHEDULER_NAME = "scheduler.pt"
 SCALER_NAME = "scaler.pt"
 # Huggingface의 Trainer를 상속받아 QuestionAnswering을 위한 Trainer를 생성합니다.
 class QuestionAnsweringTrainer(Trainer):
-    def __init__(self, *args, eval_examples=None, post_process_function=None, **kwargs):
+    def __init__(self, *args, custom_args, model_tokenizer=None, eval_examples=None, post_process_function=None, **kwargs):
         super().__init__(*args, **kwargs)
         self.eval_examples = eval_examples
         self.post_process_function = post_process_function
+        if model_tokenizer == None:
+            assert("Please check your tokenizer")
+        self.tokenizer = model_tokenizer
+        self.custom_args = custom_args
 
     def train(
         self,
@@ -504,18 +508,39 @@ class QuestionAnsweringTrainer(Trainer):
                 else:
                     tr_loss_step, output_step = self.training_step(model, inputs)
 
-                ##############################################################
-                # Train 도중 학습 샘플 출력하기
+                '''
+                Feat) Train 도중 학습 샘플 출력하기
                 #   training_step 반환 값 추가: output_step
                 #   compute_loss 반환 값 추가: output
                 #   compute_loss return_outputs = True로 변경
-                ##############################################################
-                if step % 500 == 0:
-                    print(output_step['start_logits'].size())
-                    print(torch.argmax(output_step['start_logits'], dim=1).detach().cpu().numpy())
-                    print(torch.argmax(output_step['end_logits'], dim=1).detach().cpu().numpy())
-                    exit(0)
-                ##############################################################
+                '''
+                if step % self.custom_args.sample_logging_step == 0:
+                    sample_size = output_step['start_logits'].size()[0]
+                    amount = self.custom_args.sample_logging_amount if sample_size > self.custom_args.sample_logging_amount else sample_size
+                    
+                    start_idxs = torch.argmax(output_step['start_logits'], dim=1).detach().cpu().numpy()
+                    end_idxs = torch.argmax(output_step['start_logits'], dim=1).detach().cpu().numpy()
+                    
+                    #f = open("새파일.txt", 'a')
+                    print('-'*100)
+                    print('Trained Samples')
+                    print('-'*100)
+                    f = open(self.args.output_dir+"/samples.txt", 'a')
+                    for idx in range(amount):    
+                        text = "Q & context"
+                        print(text)
+                        f.write(text+'\n')
+                        text = self.tokenizer.decode(inputs['input_ids'][idx], skip_special_tokens=True)
+                        print(text)
+                        f.write(text+'\n')
+                        text = "Answer:"
+                        print(text)
+                        f.write(text+'\n')
+                        text = self.tokenizer.decode(inputs['input_ids'][idx][start_idxs[idx]:end_idxs[idx]+1], skip_special_tokens=True)
+                        print(text)
+                        f.write(text+'\n')
+                        print('-'*100)
+                    f.close()
 
                 if (
                     args.logging_nan_inf_filter

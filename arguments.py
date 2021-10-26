@@ -90,3 +90,81 @@ class DataTrainingArguments:
     use_faiss: bool = field(
         default=False, metadata={"help": "Whether to build with faiss"}
     )
+
+@dataclass
+class CustomArguments:
+    """
+    Arguments wandb and custom settings for training
+    """
+    # wandb
+    use_wandb: bool = field(
+        default=True, metadata={"help": "Whether to use Wandb"}
+    )
+    entity_name: str = field(
+        default="clue",
+        metadata={
+            "help": "Your entity name in WandB E.g. clue or KyunghyunLim, ..."
+        },
+    )
+    project_name: str = field(
+        default="mrc_test",
+        metadata={
+            "help": "Your project name in WandB E.g. LKH, Readers, ..."
+        },
+    )
+    wandb_run_name: str = field(
+        default="model_version",
+        metadata={
+            "help": "run name in WandB E.g. Bart_v0.1, Roberta_v0.1, DPR_Bert_v0.1"
+        },
+    )
+
+    # Training
+    epochs: int = field(
+        default = 10,
+        metadata={
+            "help": "Training epoch"
+        },
+    )
+    custom_learning_rate: float = field(
+        default = 5e-5,
+        metadata={
+            "help": "Training learning rate"
+        },
+    )
+    train_batch_size: int = field(
+        default = 32,
+        metadata={
+            "help": "Training batch size"
+        },
+    )
+    valid_batch_size: int = field(
+        default = 32,
+        metadata={
+            "help": "Validation batch size"
+        },
+    )
+    accumulation_step: int = field(
+        default = 1,
+        metadata={
+            "help": "Training accumulation step"
+        },
+    )
+    sample_logging_step: int = field(
+        default = 50,
+        metadata={
+            "help": "Print samples for each set value."
+        },
+    )
+    sample_logging_amount: int = field(
+        default = 5,
+        metadata={
+            "help": "Number of samples you want to print"
+        },
+    )
+    overwite: bool = field(
+        default = True,
+        metadata={
+            "help": "whether overwrite or not"
+        },
+    )
