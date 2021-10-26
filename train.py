@@ -20,7 +20,7 @@ from tokenizers import Tokenizer
 from tokenizers.models import WordPiece
 
 from utils_qa import postprocess_qa_predictions, check_no_error
-from custom_train import QuestionAnsweringTrainer
+from custom_trainer import QuestionAnsweringTrainer
 from retrieval import SparseRetrieval
 
 from arguments import (
@@ -335,38 +335,38 @@ def run_mrc(
         else:
             checkpoint = None
         train_result = trainer.train(resume_from_checkpoint=checkpoint)
-        #training_step(model, train_dataset)
-    #     trainer.save_model()  # Saves the tokenizer too for easy upload
+       # training_step(model, train_dataset)
+        trainer.save_model()  # Saves the tokenizer too for easy upload
 
-    #     metrics = train_result.metrics
-    #     metrics["train_samples"] = len(train_dataset)
+        metrics = train_result.metrics
+        metrics["train_samples"] = len(train_dataset)
 
-    #     trainer.log_metrics("train", metrics)
-    #     trainer.save_metrics("train", metrics)
-    #     trainer.save_state()
+        trainer.log_metrics("train", metrics)
+        trainer.save_metrics("train", metrics)
+        trainer.save_state()
 
-    #     output_train_file = os.path.join(training_args.output_dir, "train_results.txt")
+        output_train_file = os.path.join(training_args.output_dir, "train_results.txt")
 
-    #     with open(output_train_file, "w") as writer:
-    #         logger.info("***** Train results *****")
-    #         for key, value in sorted(train_result.metrics.items()):
-    #             logger.info(f"  {key} = {value}")
-    #             writer.write(f"{key} = {value}\n")
+        with open(output_train_file, "w") as writer:
+            logger.info("***** Train results *****")
+            for key, value in sorted(train_result.metrics.items()):
+                logger.info(f"  {key} = {value}")
+                writer.write(f"{key} = {value}\n")
 
-    #     # State 저장
-    #     trainer.state.save_to_json(
-    #         os.path.join(training_args.output_dir, "trainer_state.json")
-    #     )
+        # State 저장
+        trainer.state.save_to_json(
+            os.path.join(training_args.output_dir, "trainer_state.json")
+        )
 
-    # # Evaluation
-    # if training_args.do_eval:
-    #     logger.info("*** Evaluate ***")
-    #     metrics = trainer.evaluate()
+    # Evaluation
+    if training_args.do_eval:
+        logger.info("*** Evaluate ***")
+        metrics = trainer.evaluate()
 
-    #     metrics["eval_samples"] = len(eval_dataset)
+        metrics["eval_samples"] = len(eval_dataset)
 
-    #     trainer.log_metrics("eval", metrics)
-    #     trainer.save_metrics("eval", metrics)
+        trainer.log_metrics("eval", metrics)
+        trainer.save_metrics("eval", metrics)
 
 
 if __name__ == "__main__":
