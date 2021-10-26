@@ -15,6 +15,7 @@ konlpy = "0.5.2"
 faiss-gpu = "^1.7.1"
 pre-commit = "^2.15.0"
 wandb = "^0.12.5"
+torch = {url = "https://download.pytorch.org/whl/cu110/torch-1.7.1%2Bcu110-cp38-cp38-linux_x86_64.whl"}
 
 [tool.poetry.dev-dependencies]
 pre-commit = "^2.10.0"

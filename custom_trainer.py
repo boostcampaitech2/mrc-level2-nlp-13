@@ -127,7 +127,7 @@ from transformers.trainer_utils import (
 )
 from transformers.training_args import ParallelMode, TrainingArguments
 from transformers.utils import logging
-from utills.utills import logging_console, logging_txt_file
+from utills.utills import logging_console, logging_csv_file
 
 _is_torch_generator_available = False
 _is_native_amp_available = False
@@ -527,16 +527,19 @@ class QuestionAnsweringTrainer(Trainer):
                     print('-'*100)
                     print('Trained Samples')
                     print('-'*100)
-                    with open(self.args.output_dir+"/train_samples.txt", 'a') as f:
-                        for idx in range(amount):  
-                            question_context = self.tokenizer.decode(inputs['input_ids'][idx], skip_special_tokens=True)
-                            predictions = self.tokenizer.decode(inputs['input_ids'][idx][start_idxs[idx]:end_idxs[idx]+1], skip_special_tokens=True)
-                            ground_truth = self.tokenizer.decode(inputs['input_ids'][idx][gt_start_idxs[idx]:gt_end_idxs[idx]+1], skip_special_tokens=True)
-                            #context_start_ids = question_context.find('?')
-                            #ground_truth = question_context[context_start_ids + gt_start_idxs[idx]:context_start_ids +gt_end_idxs[idx]+1]
-                            logging_console(question_context, predictions, ground_truth)
-                            logging_txt_file(f, question_context, predictions, ground_truth)
-                            print('-'*100)
+                    question_contexts = []
+                    predictions = []
+                    ground_truthes = []
+                    for idx in range(amount):  
+                        question_context = self.tokenizer.decode(inputs['input_ids'][idx], skip_special_tokens=True)
+                        prediction = self.tokenizer.decode(inputs['input_ids'][idx][start_idxs[idx]:end_idxs[idx]+1], skip_special_tokens=True)
+                        ground_truth = self.tokenizer.decode(inputs['input_ids'][idx][gt_start_idxs[idx]:gt_end_idxs[idx]+1], skip_special_tokens=True)
+                        logging_console(question_context, prediction, ground_truth)
+                        question_contexts.append(question_context)
+                        predictions.append(predictions)
+                        ground_truthes.append(ground_truthes)
+                        print('-'*100)
+                    logging_csv_file(self.args.output_dir + "/train_samples.csv", question_contexts, predictions, ground_truthes)
 
                 if (
                     args.logging_nan_inf_filter
@@ -792,15 +795,20 @@ class QuestionAnsweringTrainer(Trainer):
             print('-'*100)
             print('validation samples')
             print('-'*100)
-            with open(self.args.output_dir+"/valid_samples.txt", 'a') as f: 
-                for idx in range(self.custom_args.sample_logging_amount):
-                    question_context = eval_examples[idx]['question'] + ' ' + eval_examples[idx]['context']
-                    predictions = eval_preds[0]['prediction_text']
-                    ground_truth = eval_preds[1]['text']
-                    logging_console(question_context, predictions, ground_truth)
-                    logging_txt_file(f, question_context, predictions, ground_truth)
-                    print('-'*100)
-                
+            question_contexts = []
+            predictions = []
+            ground_truthes = []
+            for idx in range(self.custom_args.sample_logging_amount):
+                question_context = eval_examples[idx]['question'] + ' ' + eval_examples[idx]['context']
+                prediction = eval_preds[0][idx]['prediction_text']
+                ground_truth = eval_preds[1][idx]['answers']['text'][0]
+                logging_console(question_context, prediction, ground_truth)
+                question_contexts.append(question_context)
+                predictions.append(prediction)
+                ground_truthes.append(ground_truth)
+                print('-'*100)
+            logging_csv_file(self.args.output_dir+"/valid_samples.csv", question_contexts, predictions, ground_truthes)
+            
             self.log(metrics)
         else:
             metrics = {}

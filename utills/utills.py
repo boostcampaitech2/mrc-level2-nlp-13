@@ -1,4 +1,7 @@
+import os
 import wandb
+import pandas as pd
+
 from transformers import TrainingArguments 
 from arguments import (
     ModelArguments,
@@ -31,6 +34,8 @@ def config_setting(data_args: DataTrainingArguments,
     config.valid_batch_size = training_args.per_device_eval_batch_size = custom_args.valid_batch_size
     config.accumulation_step = training_args.gradient_accumulation_steps = custom_args.accumulation_step
     
+    config.description = custom_args.description
+
     print(training_args.num_train_epochs)
     
     return config
@@ -43,13 +48,18 @@ def logging_console(question_context, predictions, ground_truth):
     print('Answer: ')
     print(ground_truth)
 
-def logging_txt_file(f, question_context, predictions, ground_truth):
-    f.write('-'*100 + '\n')
-    f.write('Q and Context:\n')
-    f.write(question_context + '\n')
-    f.write('Prediction\n')
-    f.write(predictions + '\n')
-    f.write('Answer\n')
-    f.write(ground_truth + '\n')
-    f.write('-'*100 + '\n')
+def logging_csv_file(file_name, question_context, predictions, ground_truth):
+    if os.path.exists(file_name):
+        df = pd.read_csv(file_name)
+        new_df = pd.DataFrame()
+        new_df['QnC'] = question_context
+        new_df['Prediction'] = predictions
+        new_df['ground_truth'] = ground_truth
+        df = pd.concat([df,new_df], axis=0)
+    else:
+        df = pd.DataFrame()
+        df['QnC'] = question_context
+        df['Prediction'] = predictions
+        df['ground_truth'] = ground_truth
+    df.to_csv(file_name, index=False)
     

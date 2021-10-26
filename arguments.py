@@ -113,15 +113,21 @@ class CustomArguments:
         },
     )
     wandb_run_name: str = field(
-        default="model_version",
+        default="test",
         metadata={
             "help": "run name in WandB E.g. Bart_v0.1, Roberta_v0.1, DPR_Bert_v0.1"
+        },
+    )
+    description: str = field(
+        default="나는 애기 강민 응애",
+        metadata={
+            "help": "Explain your specific experiments settings"
         },
     )
 
     # Training
     epochs: int = field(
-        default = 10,
+        default = 1,
         metadata={
             "help": "Training epoch"
         },
@@ -163,7 +169,7 @@ class CustomArguments:
         },
     )
     overwite: bool = field(
-        default = True,
+        default = True, # False
         metadata={
             "help": "whether overwrite or not"
         },
