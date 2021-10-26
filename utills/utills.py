@@ -34,3 +34,22 @@ def config_setting(data_args: DataTrainingArguments,
     print(training_args.num_train_epochs)
     
     return config
+
+def logging_console(question_context, predictions, ground_truth):
+    print('Q and Context: ')
+    print(question_context)
+    print('Prediction: ')
+    print(predictions)
+    print('Answer: ')
+    print(ground_truth)
+
+def logging_txt_file(f, question_context, predictions, ground_truth):
+    f.write('-'*100 + '\n')
+    f.write('Q and Context:\n')
+    f.write(question_context + '\n')
+    f.write('Prediction\n')
+    f.write(predictions + '\n')
+    f.write('Answer\n')
+    f.write(ground_truth + '\n')
+    f.write('-'*100 + '\n')
+    

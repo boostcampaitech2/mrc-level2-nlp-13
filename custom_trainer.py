@@ -127,7 +127,7 @@ from transformers.trainer_utils import (
 )
 from transformers.training_args import ParallelMode, TrainingArguments
 from transformers.utils import logging
-
+from utills.utills import logging_console, logging_txt_file
 
 _is_torch_generator_available = False
 _is_native_amp_available = False
@@ -189,6 +189,7 @@ TRAINER_STATE_NAME = "trainer_state.json"
 OPTIMIZER_NAME = "optimizer.pt"
 SCHEDULER_NAME = "scheduler.pt"
 SCALER_NAME = "scaler.pt"
+
 # Huggingface의 Trainer를 상속받아 QuestionAnswering을 위한 Trainer를 생성합니다.
 class QuestionAnsweringTrainer(Trainer):
     def __init__(self, *args, custom_args, model_tokenizer=None, eval_examples=None, post_process_function=None, **kwargs):
@@ -521,26 +522,22 @@ class QuestionAnsweringTrainer(Trainer):
                     start_idxs = torch.argmax(output_step['start_logits'], dim=1).detach().cpu().numpy()
                     end_idxs = torch.argmax(output_step['start_logits'], dim=1).detach().cpu().numpy()
                     
-                    #f = open("새파일.txt", 'a')
+                    gt_start_idxs = inputs['start_positions'].detach().cpu().numpy()
+                    gt_end_idxs = inputs['end_positions'].detach().cpu().numpy()
+
                     print('-'*100)
                     print('Trained Samples')
                     print('-'*100)
-                    f = open(self.args.output_dir+"/samples.txt", 'a')
-                    for idx in range(amount):    
-                        text = "Q & context"
-                        print(text)
-                        f.write(text+'\n')
-                        text = self.tokenizer.decode(inputs['input_ids'][idx], skip_special_tokens=True)
-                        print(text)
-                        f.write(text+'\n')
-                        text = "Answer:"
-                        print(text)
-                        f.write(text+'\n')
-                        text = self.tokenizer.decode(inputs['input_ids'][idx][start_idxs[idx]:end_idxs[idx]+1], skip_special_tokens=True)
-                        print(text)
-                        f.write(text+'\n')
-                        print('-'*100)
-                    f.close()
+                    with open(self.args.output_dir+"/train_samples.txt", 'a') as f:
+                        for idx in range(amount):  
+                            question_context = self.tokenizer.decode(inputs['input_ids'][idx], skip_special_tokens=True)
+                            predictions = self.tokenizer.decode(inputs['input_ids'][idx][start_idxs[idx]:end_idxs[idx]+1], skip_special_tokens=True)
+                            ground_truth = self.tokenizer.decode(inputs['input_ids'][idx][gt_start_idxs[idx]:gt_end_idxs[idx]+1], skip_special_tokens=True)
+                            #context_start_ids = question_context.find('?')
+                            #ground_truth = question_context[context_start_ids + gt_start_idxs[idx]:context_start_ids +gt_end_idxs[idx]+1]
+                            logging_console(question_context, predictions, ground_truth)
+                            logging_txt_file(f, question_context, predictions, ground_truth)
+                            print('-'*100)
 
                 if (
                     args.logging_nan_inf_filter
@@ -670,11 +667,15 @@ class QuestionAnsweringTrainer(Trainer):
         self.store_flos()
         metrics["total_flos"] = self.state.total_flos
         metrics["train_loss"] = train_loss
+        
+        '''
         ##############################################################
         # Train 쪽에 추가하고 싶은 log 추가하기 / metrics
         ##############################################################
 
         ##############################################################
+        '''
+
         self.is_in_train = False
 
         self._memory_tracker.stop_and_update_metrics(metrics)
@@ -784,13 +785,23 @@ class QuestionAnsweringTrainer(Trainer):
             )
             metrics = self.compute_metrics(eval_preds)
 
+            '''
             ##############################################################
-            # Eval 쪽에 추가하고 싶은 log 추가하기 / metrics
+            # Eval 중 샘플 출력
             ##############################################################
-
-            ##############################################################
-
-
+            '''
+            print('-'*100)
+            print('validation samples')
+            print('-'*100)
+            with open(self.args.output_dir+"/valid_samples.txt", 'a') as f: 
+                for idx in range(self.custom_args.sample_logging_amount):
+                    question_context = eval_examples[idx]['question'] + ' ' + eval_examples[idx]['context']
+                    predictions = eval_preds[0]['prediction_text']
+                    ground_truth = eval_preds[1]['text']
+                    logging_console(question_context, predictions, ground_truth)
+                    logging_txt_file(f, question_context, predictions, ground_truth)
+                    print('-'*100)
+                
             self.log(metrics)
         else:
             metrics = {}

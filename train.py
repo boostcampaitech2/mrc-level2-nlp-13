@@ -30,7 +30,7 @@ from arguments import (
 )
 
 import wandb
-from utills.config_setting import config_setting
+from utills.utills import config_setting
 
 logger = logging.getLogger(__name__)
 
