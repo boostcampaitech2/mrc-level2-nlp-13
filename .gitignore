@@ -1,3 +1,18 @@
+wandb/
+configs/
+*.log
+*.out
+nohup.out
+__pycache__/
+logs/
+.ipynb_chekpoints
+results/
+best_model/
+prediction/
+models_result/
+data/
+modelsroberta-large/
+outputs/
 # git ignore files
 
 # 파이썬 가상 환경
