@@ -28,6 +28,7 @@ def config_setting(data_args: DataTrainingArguments,
 
     # 훈련 관련 정보 설정 및 저장
     training_args.overwrite_output_dir = custom_args.overwite
+    training_args.save_total_limit = 2
     config.epochs = training_args.num_train_epochs = custom_args.epochs
     config.learning_rate = training_args.learning_rate = custom_args.custom_learning_rate
     config.train_batch_size = training_args.per_device_train_batch_size = custom_args.train_batch_size

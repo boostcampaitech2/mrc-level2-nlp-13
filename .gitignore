@@ -1,5 +1,5 @@
+# git ignore files
 wandb/
-configs/
 *.log
 *.out
 nohup.out
@@ -11,9 +11,9 @@ best_model/
 prediction/
 models_result/
 data/
-modelsroberta-large/
 outputs/
-# git ignore files
+notebooks/
+
 
 # 파이썬 가상 환경
 .venv_mrc/

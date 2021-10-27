@@ -89,8 +89,8 @@ def main():
     )
     model = AutoModelForQuestionAnswering.from_pretrained(
         model_args.model_name_or_path,
-        from_tf=bool(".ckpt" in model_args.model_name_or_path),
-        config=config,
+        #from_tf=bool(".ckpt" in model_args.model_name_or_path),
+        #config=config,
     )
 
     # True일 경우 : run passage retrieval
@@ -281,6 +281,8 @@ def run_mrc(
         return metric.compute(predictions=p.predictions, references=p.label_ids)
 
     print("init trainer...")
+    #print(model)
+    #exit(0)
     # Trainer 초기화
     trainer = QuestionAnsweringTrainer(
         model=model,
