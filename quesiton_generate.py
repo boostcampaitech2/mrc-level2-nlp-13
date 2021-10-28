@@ -57,10 +57,10 @@ def main():
                 print('*'*30)
                 print(len(value_dic['question']))
 
-            value_dic['doc_id'] = value_dic['doc_id'].extend(batch_doc_id)
-            value_dic['context'] = value_dic['context'].extend(batch_contexts)
-            value_dic['answer'] = value_dic['answer'].extend(batch_answers)
-            value_dic['question'] = value_dic['question'].extend(questions)
+            value_dic['doc_id'].extend(batch_doc_id)
+            value_dic['context'].extend(batch_contexts)
+            value_dic['answer'].extend(batch_answers)
+            value_dic['question'].extend(questions)
 
             del qg, questions
 
