@@ -26,8 +26,7 @@ def timer(name):
     yield
     print(f"[{name}] done in {time.time() - t0:.3f} s")
 
-
-class SparseRetrieval:
+class RetrievalBasic:
     def __init__(
         self,
         tokenize_fn,
@@ -35,6 +34,36 @@ class SparseRetrieval:
         context_path: Optional[str] = "wikipedia_documents.json",
     ) -> NoReturn:
 
+        # Path 설정 및 데이터 로드
+        self.data_path = data_path
+        with open(os.path.join(data_path, context_path), "r", encoding="utf-8") as f:
+            wiki = json.load(f)
+
+        # Context 정렬 및 index 할당
+        self.contexts = list(
+            dict.fromkeys([v["text"] for v in wiki.values()])
+        )  # set 은 매번 순서가 바뀌므로
+        print(f"Lengths of unique contexts : {len(self.contexts)}")
+        self.ids = list(range(len(self.contexts)))
+
+        # Set tokenizer
+        self.tokenizer = tokenize_fn
+
+        # Define & init variables
+        self.q_embedding = None
+        self.p_embedding = None  # get_sparse_embedding()로 생성합니다.
+        self.indexer = None  # build_faiss()로 생성합니다.
+
+
+class SparseRetrieval(RetrievalBasic):
+    def __init__(
+        self,
+        tokenize_fn,
+        data_path: Optional[str] = "../data/",
+        context_path: Optional[str] = "wikipedia_documents.json",
+        embedding_fn : Optional[str] = "TF-IDF"
+    ) -> NoReturn:
+        
         """
         Arguments:
             tokenize_fn:
@@ -50,62 +79,82 @@ class SparseRetrieval:
             context_path:
                 Passage들이 묶여있는 파일명입니다.
 
+            embedding_fn:
+                Sparse embedding의 함수를 결정합니다 TF-IDF, BM25 중 고를 수 있습니다.
+
             data_path/context_path가 존재해야합니다.
 
         Summary:
             Passage 파일을 불러오고 TfidfVectorizer를 선언하는 기능을 합니다.
         """
-
-        self.data_path = data_path
-        with open(os.path.join(data_path, context_path), "r", encoding="utf-8") as f:
-            wiki = json.load(f)
-
-        self.contexts = list(
-            dict.fromkeys([v["text"] for v in wiki.values()])
-        )  # set 은 매번 순서가 바뀌므로
-        print(f"Lengths of unique contexts : {len(self.contexts)}")
-        self.ids = list(range(len(self.contexts)))
+        # Set Basic variables
+        super().__init__(self, tokenize_fn, data_path, context_path)
 
         # Transform by vectorizer
         self.tfidfv = TfidfVectorizer(
-            tokenizer=tokenize_fn,
+            tokenizer=self.tokenize_fn,
             ngram_range=(1, 2),
             max_features=50000,
         )
 
-        self.p_embedding = None  # get_sparse_embedding()로 생성합니다
-        self.indexer = None  # build_faiss()로 생성합니다.
+        # Set default variables
+        self.embedding_fn = embedding_fn
 
     def get_sparse_embedding(self) -> NoReturn:
 
         """
         Summary:
             Passage Embedding을 만들고
-            TFIDF와 Embedding을 pickle로 저장합니다.
+            Embedding을 pickle로 저장합니다.
             만약 미리 저장된 파일이 있으면 저장된 pickle을 불러옵니다.
         """
+        # 파일 이름 및 경로 설정
+        pickle_name = f"sparse_embedding.bin"
+        emd_path = os.path.join(self.data_path, pickle_name)
 
         # Pickle을 저장합니다.
-        pickle_name = f"sparse_embedding.bin"
-        tfidfv_name = f"tfidv.bin"
-        emd_path = os.path.join(self.data_path, pickle_name)
-        tfidfv_path = os.path.join(self.data_path, tfidfv_name)
+        if self.embedding_fn == "TF-IDF":
+            
+            tfidfv_name = f"tfidv.bin"
+            tfidfv_path = os.path.join(self.data_path, tfidfv_name)
 
-        if os.path.isfile(emd_path) and os.path.isfile(tfidfv_path):
-            with open(emd_path, "rb") as file:
-                self.p_embedding = pickle.load(file)
-            with open(tfidfv_path, "rb") as file:
-                self.tfidfv = pickle.load(file)
-            print("Embedding pickle load.")
-        else:
-            print("Build passage embedding")
-            self.p_embedding = self.tfidfv.fit_transform(self.contexts)
-            print(self.p_embedding.shape)
-            with open(emd_path, "wb") as file:
-                pickle.dump(self.p_embedding, file)
-            with open(tfidfv_path, "wb") as file:
-                pickle.dump(self.tfidfv, file)
-            print("Embedding pickle saved.")
+            if os.path.isfile(emd_path) and os.path.isfile(tfidfv_path):
+                with open(emd_path, "rb") as file:
+                    self.p_embedding = pickle.load(file)
+                with open(tfidfv_path, "rb") as file:
+                    self.tfidfv = pickle.load(file)
+                print("Embedding pickle load.")
+            else:
+                print("Build passage embedding")
+                self.p_embedding = self.tfidfv.fit_transform(self.contexts)
+                print(self.p_embedding.shape)
+                with open(emd_path, "wb") as file:
+                    pickle.dump(self.p_embedding, file)
+                with open(tfidfv_path, "wb") as file:
+                    pickle.dump(self.tfidfv, file)
+                print("Embedding pickle saved.")
+
+        elif self.embedding_fn == "BM25":
+
+            bm25_name = f"bm25.bin"
+            bm25_path = os.path.join(self.data_path, bm25_name)
+
+            if os.path.isfile(emd_path) and os.path.isfile(bm25_path):
+                with open(emd_path, "rb") as file:
+                    self.p_embedding = pickle.load(file)
+                with open(bm25_path, "rb") as file:
+                    self.bm25 = pickle.load(file)
+                print("Embedding pickle load.")
+            else:
+                print("Build passage embedding")
+                self.p_embedding = self.tfidfv.fit_transform(self.contexts)
+                print(self.p_embedding.shape)
+                with open(emd_path, "wb") as file:
+                    pickle.dump(self.p_embedding, file)
+                with open(bm25_path, "wb") as file:
+                    pickle.dump(self.tfidfv, file)
+                print("Embedding pickle saved.")
+
 
     def build_faiss(self, num_clusters=64) -> NoReturn:
 
