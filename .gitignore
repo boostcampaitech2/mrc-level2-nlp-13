@@ -22,7 +22,8 @@ outputs/
 models/
 outputs/
 nohup.outputs
-nohup.out
+*.out
+*.log
 
 # 데이터
 data/
