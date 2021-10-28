@@ -31,6 +31,7 @@ test.*
 temp.*
 
 # notebook 파일
+notebook/
 *.ipynb
 
 # cache 파일
