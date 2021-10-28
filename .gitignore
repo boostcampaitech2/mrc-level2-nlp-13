@@ -22,6 +22,7 @@ outputs/
 models/
 outputs/
 nohup.outputs
+nohup.out
 
 # 데이터
 data/
