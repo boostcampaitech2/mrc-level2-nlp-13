@@ -26,6 +26,73 @@ def timer(name):
     yield
     print(f"[{name}] done in {time.time() - t0:.3f} s")
 
+class BM25:
+    """
+        BM25를 구현한 class 입니다.
+    """
+    def __init__(
+        self,
+        tokenizer,
+        n_gram_range,
+        max_features,
+    ):
+        """
+            tokenizer, n_gram_range, max_features 초기화
+        """
+        self.tokenizer = tokenizer
+        self.n_gram_range = n_gram_range
+        self.max_features = max_features
+        
+        
+
+    def fit_transform(self, contexts, k=1.2, b=0.5):
+        self.contexts = contexts
+
+        # Tokenizing text
+        print("----- Tokenizing Contexts -----")
+        self.tokenized_contexts = list(map(self.tokenizer, tqdm(contexts)))
+
+        # Bulid Vocab
+        self.vocab = set()
+        print("----- Bulid Vocab for BM25 score -----")
+        for con in tqdm(self.tokenized_contexts):
+            self.vocab = self.vocab.union(set(self.tokenizer(con)))
+        self.term2idx = {t : idx for idx, t in enumerate(self.vocab)}
+        self.idx2term = {idx : t for idx, t in enumerate(self.vocab)}
+
+        # initiate TF & IDF array
+        self.TF = np.zeros((len(self.contexts),len(self.vocab)))
+        self.IDF = np.zeros((len(self.contexts),len(self.vocab)))
+
+        # Calculate Term Frequency (TF)
+        print("----- Calculate TF Score -----")
+        for idx, con in enumerate(tqdm(self.contexts)):
+            tokenized = tokenizer.tokenize(con)
+            for token in tokenized:
+                self.TF[idx, self.term2idx[token]]+=1
+
+        # Calculate Inverse Document Frequency (IDF)
+        print("----- Calculate IDF Score -----")
+        N = len(self.contexts)
+        for token in tqdm(self.vocab):
+            df_t = 0
+            for con in self.tokenized_contexts:
+                if token in con:
+                    df_t+=1
+            self.IDF[:,self.term2idx[token]] = np.log(N / df_t)
+
+        # Calculate BM25 vector matrix
+        print("----- Calculate BM25 Score -----")
+        contexts_len = np.array(list(map(len, contexts)))
+        avg_contexts_len = np.mean(contexts_len)
+
+        p_div = self.IDF * self.TF * (k + 1)
+        div = self.TF + (k * (1 - b + b * contexts_len / avg_contexts_len)).reshape(-1,1)
+
+        BM25_matrix = p_div / div
+
+        return BM25_matrix
+
 class RetrievalBasic:
     def __init__(
         self,
@@ -61,7 +128,7 @@ class SparseRetrieval(RetrievalBasic):
         tokenize_fn,
         data_path: Optional[str] = "../data/",
         context_path: Optional[str] = "wikipedia_documents.json",
-        embedding_fn : Optional[str] = "TF-IDF"
+        embedding_form : Optional[str] = "TF-IDF"
     ) -> NoReturn:
         
         """
@@ -97,8 +164,14 @@ class SparseRetrieval(RetrievalBasic):
             max_features=50000,
         )
 
+        self.bm25 = BM25(
+            tokenizer=self.tokenize_fn,
+            ngram_range=(1, 2),
+            max_features=50000,
+        )
+
         # Set default variables
-        self.embedding_fn = embedding_fn
+        self.embedding_form = embedding_form
 
     def get_sparse_embedding(self) -> NoReturn:
 
@@ -113,7 +186,7 @@ class SparseRetrieval(RetrievalBasic):
         emd_path = os.path.join(self.data_path, pickle_name)
 
         # Pickle을 저장합니다.
-        if self.embedding_fn == "TF-IDF":
+        if self.embedding_form == "TF-IDF":
             
             tfidfv_name = f"tfidv.bin"
             tfidfv_path = os.path.join(self.data_path, tfidfv_name)
@@ -125,7 +198,7 @@ class SparseRetrieval(RetrievalBasic):
                     self.tfidfv = pickle.load(file)
                 print("Embedding pickle load.")
             else:
-                print("Build passage embedding")
+                print(f"Build passage embedding for {self.embedding_form}")
                 self.p_embedding = self.tfidfv.fit_transform(self.contexts)
                 print(self.p_embedding.shape)
                 with open(emd_path, "wb") as file:
@@ -134,7 +207,7 @@ class SparseRetrieval(RetrievalBasic):
                     pickle.dump(self.tfidfv, file)
                 print("Embedding pickle saved.")
 
-        elif self.embedding_fn == "BM25":
+        elif self.embedding_form == "BM25":
 
             bm25_name = f"bm25.bin"
             bm25_path = os.path.join(self.data_path, bm25_name)
@@ -146,13 +219,13 @@ class SparseRetrieval(RetrievalBasic):
                     self.bm25 = pickle.load(file)
                 print("Embedding pickle load.")
             else:
-                print("Build passage embedding")
-                self.p_embedding = self.tfidfv.fit_transform(self.contexts)
+                print(f"Build passage embedding for {self.embedding_form}")
+                self.p_embedding = self.bm25.fit_transform(self.contexts)
                 print(self.p_embedding.shape)
                 with open(emd_path, "wb") as file:
                     pickle.dump(self.p_embedding, file)
                 with open(bm25_path, "wb") as file:
-                    pickle.dump(self.tfidfv, file)
+                    pickle.dump(self.bm25, file)
                 print("Embedding pickle saved.")
 
 
@@ -270,7 +343,7 @@ class SparseRetrieval(RetrievalBasic):
         Note:
             vocab 에 없는 이상한 단어로 query 하는 경우 assertion 발생 (예) 뙣뙇?
         """
-
+        
         with timer("transform"):
             query_vec = self.tfidfv.transform([query])
         assert (
@@ -481,6 +554,7 @@ if __name__ == "__main__":
         tokenize_fn=tokenizer.tokenize,
         data_path=args.data_path,
         context_path=args.context_path,
+        embedding_form="BM25",
     )
 
     query = "대통령을 포함한 미국의 행정부 견제권을 갖는 국가 기관은?"
