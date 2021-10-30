@@ -26,6 +26,34 @@ def timer(name):
     yield
     print(f"[{name}] done in {time.time() - t0:.3f} s")
 
+class RetrievalBasic:
+    def __init__(
+        self,
+        tokenize_fn,
+        data_path: Optional[str] = "../data/",
+        context_path: Optional[str] = "wikipedia_documents.json",
+    ) -> NoReturn:
+
+        # Path 설정 및 데이터 로드
+        self.data_path = data_path
+        with open(os.path.join(data_path, context_path), "r", encoding="utf-8") as f:
+            wiki = json.load(f)
+
+        # Context 정렬 및 index 할당
+        self.contexts = list(
+            dict.fromkeys([v["text"] for v in wiki.values()])
+        )  # set 은 매번 순서가 바뀌므로
+        print(f"Lengths of unique contexts : {len(self.contexts)}")
+        self.ids = list(range(len(self.contexts)))
+
+        # Set tokenizer
+        self.tokenizer = tokenize_fn
+
+        # Define & init variables
+        self.q_embedding = None
+        self.p_embedding = None  
+        self.indexer = None
+
 class BM25:
     """
         BM25를 구현한 class 입니다.
@@ -33,15 +61,19 @@ class BM25:
     def __init__(
         self,
         tokenizer,
-        n_gram_range,
+        ngram_range,
         max_features,
     ):
         """
             tokenizer, n_gram_range, max_features 초기화
         """
         self.tokenizer = tokenizer
-        self.n_gram_range = n_gram_range
+        self.ngram_range = ngram_range
         self.max_features = max_features
+
+        self.vocab = None
+        self.term2idx = None
+        self.idx2term = None
         
         
 
@@ -56,7 +88,7 @@ class BM25:
         self.vocab = set()
         print("----- Bulid Vocab for BM25 score -----")
         for con in tqdm(self.tokenized_contexts):
-            self.vocab = self.vocab.union(set(self.tokenizer(con)))
+            self.vocab = self.vocab.union(set(con))
         self.term2idx = {t : idx for idx, t in enumerate(self.vocab)}
         self.idx2term = {idx : t for idx, t in enumerate(self.vocab)}
 
@@ -91,35 +123,39 @@ class BM25:
 
         BM25_matrix = p_div / div
 
+        self.BM25_matrix = BM25_matrix
+
         return BM25_matrix
 
-class RetrievalBasic:
-    def __init__(
-        self,
-        tokenize_fn,
-        data_path: Optional[str] = "../data/",
-        context_path: Optional[str] = "wikipedia_documents.json",
-    ) -> NoReturn:
+    def transform(self, querys:List[str]):
+        assert self.vocab, "Contexts에 아직 fitting되지 않았습니다."
+        
+        tokenized_querys = list(map(self.tokenizer, querys))
+    
+        # initiate TF & IDF array
+        TF = np.zeros((len(querys),len(self.vocab)))
+        IDF = np.zeros((len(querys),len(self.vocab)))
 
-        # Path 설정 및 데이터 로드
-        self.data_path = data_path
-        with open(os.path.join(data_path, context_path), "r", encoding="utf-8") as f:
-            wiki = json.load(f)
+        # Calculate Term Frequency (TF)
+        print("----- Calculate TF Score -----")
+        for idx, tokenized_query in enumerate(tqdm(tokenized_querys)):
+            for token in tokenized_query:
+                TF[idx, self.term2idx[token]]+=1
 
-        # Context 정렬 및 index 할당
-        self.contexts = list(
-            dict.fromkeys([v["text"] for v in wiki.values()])
-        )  # set 은 매번 순서가 바뀌므로
-        print(f"Lengths of unique contexts : {len(self.contexts)}")
-        self.ids = list(range(len(self.contexts)))
+        # Calculate Inverse Document Frequency (IDF)
+        print("----- Calculate IDF Score -----")
+        N = len(self.contexts)
+        for idx, tokenized_query in enumerate(tqdm(tokenized_querys)):
+            for token in tokenized_query:
+                df_t = 0
+                for con in self.tokenized_contexts:
+                    if token in con:
+                        df_t+=1
+                IDF[idx, self.term2idx[token]] = np.log(N / df_t)
 
-        # Set tokenizer
-        self.tokenizer = tokenize_fn
+        q_embedding = TF * IDF
 
-        # Define & init variables
-        self.q_embedding = None
-        self.p_embedding = None  # get_sparse_embedding()로 생성합니다.
-        self.indexer = None  # build_faiss()로 생성합니다.
+        return q_embedding
 
 
 class SparseRetrieval(RetrievalBasic):
@@ -155,22 +191,26 @@ class SparseRetrieval(RetrievalBasic):
             Passage 파일을 불러오고 TfidfVectorizer를 선언하는 기능을 합니다.
         """
         # Set Basic variables
-        super().__init__(self, tokenize_fn, data_path, context_path)
+        super().__init__(tokenize_fn, data_path, context_path)
 
         # Transform by vectorizer
         self.tfidfv = TfidfVectorizer(
-            tokenizer=self.tokenize_fn,
+            tokenizer=self.tokenizer,
             ngram_range=(1, 2),
             max_features=50000,
         )
 
         self.bm25 = BM25(
-            tokenizer=self.tokenize_fn,
+            tokenizer=self.tokenizer,
             ngram_range=(1, 2),
             max_features=50000,
         )
 
         # Set default variables
+        self.embedding_type = {
+            "TF-IDF" : self.tfidfv,
+            "BM25"  : self.bm25,
+        }
         self.embedding_form = embedding_form
 
     def get_sparse_embedding(self) -> NoReturn:
@@ -343,9 +383,9 @@ class SparseRetrieval(RetrievalBasic):
         Note:
             vocab 에 없는 이상한 단어로 query 하는 경우 assertion 발생 (예) 뙣뙇?
         """
-        
+
         with timer("transform"):
-            query_vec = self.tfidfv.transform([query])
+            query_vec = self.embedding_type[self.embedding_form].transform([query])
         assert (
             np.sum(query_vec) != 0
         ), "오류가 발생했습니다. 이 오류는 보통 query에 vectorizer의 vocab에 없는 단어만 존재하는 경우 발생합니다."
@@ -374,7 +414,7 @@ class SparseRetrieval(RetrievalBasic):
             vocab 에 없는 이상한 단어로 query 하는 경우 assertion 발생 (예) 뙣뙇?
         """
 
-        query_vec = self.tfidfv.transform(queries)
+        query_vec = self.embedding_type[self.embedding_form].transform(queries)
         assert (
             np.sum(query_vec) != 0
         ), "오류가 발생했습니다. 이 오류는 보통 query에 vectorizer의 vocab에 없는 단어만 존재하는 경우 발생합니다."
@@ -474,7 +514,7 @@ class SparseRetrieval(RetrievalBasic):
             vocab 에 없는 이상한 단어로 query 하는 경우 assertion 발생 (예) 뙣뙇?
         """
 
-        query_vec = self.tfidfv.transform([query])
+        query_vec = self.embedding_type[self.embedding_form].transform([query])
         assert (
             np.sum(query_vec) != 0
         ), "오류가 발생했습니다. 이 오류는 보통 query에 vectorizer의 vocab에 없는 단어만 존재하는 경우 발생합니다."
@@ -499,7 +539,7 @@ class SparseRetrieval(RetrievalBasic):
             vocab 에 없는 이상한 단어로 query 하는 경우 assertion 발생 (예) 뙣뙇?
         """
 
-        query_vecs = self.tfidfv.transform(queries)
+        query_vecs = self.embedding_type[self.embedding_form].transform(queries)
         assert (
             np.sum(query_vecs) != 0
         ), "오류가 발생했습니다. 이 오류는 보통 query에 vectorizer의 vocab에 없는 단어만 존재하는 경우 발생합니다."
@@ -516,19 +556,19 @@ if __name__ == "__main__":
 
     parser = argparse.ArgumentParser(description="")
     parser.add_argument(
-        "--dataset_name", metavar="./data/train_dataset", type=str, help=""
+        "--dataset_name", default="../data/train_dataset", type=str, help=""
     )
     parser.add_argument(
         "--model_name_or_path",
-        metavar="bert-base-multilingual-cased",
+        default="bert-base-multilingual-cased",
         type=str,
         help="",
     )
-    parser.add_argument("--data_path", metavar="./data", type=str, help="")
+    parser.add_argument("--data_path", default="../data", type=str, help="")
     parser.add_argument(
-        "--context_path", metavar="wikipedia_documents", type=str, help=""
+        "--context_path", default="wikipedia_documents.json", type=str, help=""
     )
-    parser.add_argument("--use_faiss", metavar=False, type=bool, help="")
+    parser.add_argument("--use_faiss", default=False, type=bool, help="")
 
     args = parser.parse_args()
 
@@ -556,6 +596,8 @@ if __name__ == "__main__":
         context_path=args.context_path,
         embedding_form="BM25",
     )
+
+    retriever.get_sparse_embedding()
 
     query = "대통령을 포함한 미국의 행정부 견제권을 갖는 국가 기관은?"
 
