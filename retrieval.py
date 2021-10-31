@@ -78,6 +78,7 @@ class BM25:
         
 
     def fit_transform(self, contexts, k=1.2, b=0.5):
+        # allocate contexts to class
         self.contexts = contexts
 
         # Tokenizing text
@@ -85,33 +86,33 @@ class BM25:
         self.tokenized_contexts = list(map(self.tokenizer, tqdm(contexts)))
 
         # Bulid Vocab
-        self.vocab = set()
         print("----- Bulid Vocab for BM25 score -----")
-        for con in tqdm(self.tokenized_contexts):
-            self.vocab = self.vocab.union(set(con))
+        self.vocab = set([token for tokenized_context in tqdm(self.tokenized_contexts) for token in tokenized_context])
         self.term2idx = {t : idx for idx, t in enumerate(self.vocab)}
         self.idx2term = {idx : t for idx, t in enumerate(self.vocab)}
 
+        # Docs with idx
+        list2idx = lambda li : list(map(lambda tok : self.term2idx[tok] ,li))
+        docs = list(map(list2idx, tqdm(self.tokenized_contexts)))
+
         # initiate TF & IDF array
-        self.TF = np.zeros((len(self.contexts),len(self.vocab)))
-        self.IDF = np.zeros((len(self.contexts),len(self.vocab)))
+        self.TF = np.zeros((len(self.contexts),len(self.vocab)) , dtype=np.float32)
+        self.IDF = np.zeros((len(self.contexts),len(self.vocab)), dtype=np.float32)
 
         # Calculate Term Frequency (TF)
         print("----- Calculate TF Score -----")
-        for idx, con in enumerate(tqdm(self.contexts)):
-            tokenized = tokenizer.tokenize(con)
-            for token in tokenized:
-                self.TF[idx, self.term2idx[token]]+=1
+        for idx, doc in enumerate(tqdm(docs)):
+            for token_idx in doc:
+                self.TF[idx, token_idx]+=1
 
         # Calculate Inverse Document Frequency (IDF)
         print("----- Calculate IDF Score -----")
-        N = len(self.contexts)
-        for token in tqdm(self.vocab):
-            df_t = 0
-            for con in self.tokenized_contexts:
-                if token in con:
-                    df_t+=1
-            self.IDF[:,self.term2idx[token]] = np.log(N / df_t)
+        N = len(contexts)
+        
+        for voca in tqdm(self.vocab):
+            df_t = np.sum([self.term2idx[voca] in doc for doc in docs])
+            df_t = 1 if df_t == 0 else df_t
+            self.IDF[:,self.term2idx[voca]] = np.log(N / df_t)
 
         # Calculate BM25 vector matrix
         print("----- Calculate BM25 Score -----")
@@ -130,11 +131,12 @@ class BM25:
     def transform(self, querys:List[str]):
         assert self.vocab, "Contexts에 아직 fitting되지 않았습니다."
         
+        # Tokenize Querys
         tokenized_querys = list(map(self.tokenizer, querys))
     
         # initiate TF & IDF array
-        TF = np.zeros((len(querys),len(self.vocab)))
-        IDF = np.zeros((len(querys),len(self.vocab)))
+        TF = np.zeros((len(querys),len(self.vocab)), dtype=np.float32)
+        IDF = np.zeros((len(querys),len(self.vocab)), dtype=np.float32)
 
         # Calculate Term Frequency (TF)
         print("----- Calculate TF Score -----")
@@ -147,11 +149,9 @@ class BM25:
         N = len(self.contexts)
         for idx, tokenized_query in enumerate(tqdm(tokenized_querys)):
             for token in tokenized_query:
-                df_t = 0
-                for con in self.tokenized_contexts:
-                    if token in con:
-                        df_t+=1
-                IDF[idx, self.term2idx[token]] = np.log(N / df_t)
+                df_t = np.sum([token in doc for doc in self.tokenized_contexts])
+                df_t = 1 if df_t == 0 else df_t
+                IDF[idx ,self.term2idx[token]] = np.log(N / df_t)
 
         q_embedding = TF * IDF
 
@@ -560,7 +560,7 @@ if __name__ == "__main__":
     )
     parser.add_argument(
         "--model_name_or_path",
-        default="bert-base-multilingual-cased",
+        default="klue/bert-base",
         type=str,
         help="",
     )
