@@ -27,6 +27,8 @@ def config_setting(data_args: DataTrainingArguments,
     #config.retriver_model = developing ...
 
     # 훈련 관련 정보 설정 및 저장
+    training_args.evaluation_strategy = "steps"
+    training_args.eval_steps = 1  # evaluation step.
     training_args.overwrite_output_dir = custom_args.overwite
     training_args.save_total_limit = 2
     config.epochs = training_args.num_train_epochs = custom_args.epochs

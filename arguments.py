@@ -78,11 +78,15 @@ class DataTrainingArguments:
         default=True,
         metadata={"help": "Whether to run passage retrieval using sparse embedding."},
     )
+    kind_of_retrieval: str = field(
+        default='Sparse', #SparseDense
+        metadata={"help": "Kind of retrieval."},
+    )
     num_clusters: int = field(
-        default=64, metadata={"help": "Define how many clusters to use for faiss."}
+        default=128, metadata={"help": "Define how many clusters to use for faiss."}
     )
     top_k_retrieval: int = field(
-        default=1,
+        default=10,
         metadata={
             "help": "Define how many top-k passages to retrieve based on similarity."
         },
@@ -127,7 +131,7 @@ class CustomArguments:
 
     # Training
     epochs: int = field(
-        default = 10,
+        default = 1,
         metadata={
             "help": "Training epoch"
         },
@@ -151,7 +155,7 @@ class CustomArguments:
         },
     )
     accumulation_step: int = field(
-        default = 1,
+        default = 10,
         metadata={
             "help": "Training accumulation step"
         },
