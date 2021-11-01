@@ -15,13 +15,13 @@ class ModelArguments:
         },
     )
     config_name: Optional[str] = field(
-        default=None,
+        default="klue/roberta-large",
         metadata={
             "help": "Pretrained config name or path if not the same as model_name"
         },
     )
     tokenizer_name: Optional[str] = field(
-        default="klue/bert-base",
+        default="klue/roberta-large",
         metadata={
             "help": "Pretrained tokenizer name or path if not the same as model_name"
         },
@@ -78,11 +78,15 @@ class DataTrainingArguments:
         default=True,
         metadata={"help": "Whether to run passage retrieval using sparse embedding."},
     )
+    kind_of_retrieval: str = field(
+        default='Sparse', #SparseDense
+        metadata={"help": "Kind of retrieval."},
+    )
     num_clusters: int = field(
-        default=64, metadata={"help": "Define how many clusters to use for faiss."}
+        default=128, metadata={"help": "Define how many clusters to use for faiss."}
     )
     top_k_retrieval: int = field(
-        default=35,
+        default=30,
         metadata={
             "help": "Define how many top-k passages to retrieve based on similarity."
         },
@@ -127,7 +131,7 @@ class CustomArguments:
 
     # Training
     epochs: int = field(
-        default = 3,
+        default = 1,
         metadata={
             "help": "Training epoch"
         },
@@ -151,7 +155,7 @@ class CustomArguments:
         },
     )
     accumulation_step: int = field(
-        default = 1,
+        default = 10,
         metadata={
             "help": "Training accumulation step"
         },
@@ -173,4 +177,19 @@ class CustomArguments:
         metadata={
             "help": "whether overwrite or not"
         },
+    )
+
+@dataclass
+class QuestionGenerationArguments:
+    """
+    Arguments for Question Generation
+    """
+    data_path: Optional[str] = field(
+        default= "../data/",
+        metadata={"help": "path for data"},
+    )
+
+    context_path: Optional[str] = field(
+        default= "wikipedia_documents.json",
+        metadata={"help": "exact path for wiki json file"},
     )
