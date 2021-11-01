@@ -18,7 +18,6 @@ outputs/
 # 파이썬 가상 환경
 .venv_mrc/
 
-
 # 모델 결과
 models/
 outputs/
@@ -27,12 +26,12 @@ nohup.out
 # 데이터
 data/
 
-
 # 테스트 파일
 test.*
 temp.*
 
 # notebook 파일
+notebook/
 *.ipynb
 
 # cache 파일
