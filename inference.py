@@ -33,7 +33,7 @@ from transformers import (
 
 from utils_qa import postprocess_qa_predictions, check_no_error
 from trainer_qa import QuestionAnsweringTrainer
-from retrieval_bm25 import SparseRetrieval
+from retrieval import SparseRetrieval
 
 from arguments import (
     ModelArguments,
@@ -126,7 +126,7 @@ def run_sparse_retrieval(
 
     # Query에 맞는 Passage들을 Retrieval 합니다.
     retriever = SparseRetrieval(
-        tokenize_fn=tokenize_fn, data_path=data_path, context_path=context_path, embedding_form="BM25"
+        tokenize_fn=tokenize_fn, data_path=data_path, context_path=context_path, embedding_form="ES"
     )
     retriever.get_sparse_embedding()
 

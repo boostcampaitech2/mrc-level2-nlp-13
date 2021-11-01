@@ -5,6 +5,8 @@ import faiss
 import pickle
 import numpy as np
 import pandas as pd
+import re
+import time
 
 from tqdm.auto import tqdm
 from contextlib import contextmanager
@@ -30,8 +32,8 @@ from transformers import (
     AdamW, get_linear_schedule_with_warmup,
     TrainingArguments,
 )
-
-
+from subprocess import Popen, PIPE, STDOUT
+from elasticsearch import Elasticsearch
 
 @contextmanager
 def timer(name):
@@ -66,297 +68,36 @@ class RetrievalBasic:
         self.p_embedding = None  # get_sparse_embedding()로 생성합니다.
         self.indexer = None  # build_faiss()로 생성합니다.
 
-class DenseRetrieval(RetrievalBasic):
-    def __init__(
-        self,
-        tokenize_fn,
-        p_encoder,
-        q_encoder,
-        args,
-        data_path: Optional[str] = "../data/",
-        context_path: Optional[str] = "wikipedia_documents.json",
-    ):
-        # self 들어가면 안된다..
-        super().__init__(tokenize_fn, data_path, context_path)
+def make_elastic_data():
+    with open('../data/wikipedia_documents.json', 'r') as f:
+        wiki_data = pd.DataFrame(json.load(f)).transpose()
 
-        self.p_encoder = p_encoder
-        self.q_encoder = q_encoder
-        self.args = args
+    wiki_data = wiki_data.drop_duplicates(['text']) # 3876
+    wiki_data = wiki_data.reset_index()
+    del wiki_data['index']
 
-        # 이부분이 있는게 편한가..
-        self.dataset = load_from_disk(os.path.join(data_path,"train_dataset"))
-        self.test = load_from_disk(os.path.join(data_path,"test_dataset"))['validation']
+    wiki_data['text_origin'] = wiki_data['text']
 
+    wiki_data['text_origin'] = wiki_data['text_origin'].apply(lambda x : ' '.join(re.sub(r'''[^ \r\nㄱ-ㅎㅏ-ㅣ가-힣a-zA-Z0-9ぁ-ゔァ-ヴー々〆〤一-龥~₩!@#$%^&*()“”‘’《》≪≫〈〉『』「」＜＞_+|{}:"<>?`\-=\\[\];',.\/·]''', ' ', str(x.lower().strip())).split()))
 
-    def load_dataset(self, eval=False):
-        datasets = self.dataset
+    wiki_data['text'] = wiki_data['text'].apply(lambda x : x.replace('\\n\\n',' '))
+    wiki_data['text'] = wiki_data['text'].apply(lambda x : x.replace('\n\n',' '))
+    wiki_data['text'] = wiki_data['text'].apply(lambda x : x.replace('\\n',' '))
+    wiki_data['text'] = wiki_data['text'].apply(lambda x : x.replace('\n',' '))
 
-        train_dataset = datasets["train"]
+    wiki_data['text'] = wiki_data['text'].apply(lambda x : ' '.join(re.sub(r'''[^ \r\nㄱ-ㅎㅏ-ㅣ가-힣a-zA-Z0-9~₩!@#$%^&*()_+|{}:"<>?`\-=\\[\];',.\/]''', ' ', str(x.lower().strip())).split()))
 
-        q_seqs = self.tokenizer(
-            train_dataset["question"], padding="longest", truncation=True, max_length=512, return_tensors="pt"
-        )
-        p_seqs = self.tokenizer(
-            train_dataset["context"], padding="max_length", truncation=True, max_length=512, return_tensors="pt"
-        )
+    title = []
+    text = []
+    text_origin = []
 
-        train_dataset = TensorDataset(
-            p_seqs["input_ids"],
-            p_seqs["attention_mask"],
-            p_seqs["token_type_ids"],
-            q_seqs["input_ids"],
-            q_seqs["attention_mask"],
-            q_seqs["token_type_ids"],
-        )
-        eval_dataset = None
+    for num in tqdm(range(len(wiki_data))):
+        title.append(wiki_data['title'][num])
+        text.append(wiki_data['text'][num])
+        text_origin.append(wiki_data['text_origin'][num])
 
-        if eval:
-            eval_dataset = datasets["validation"]
-
-            q_seqs = self.tokenizer(
-                eval_dataset["question"], padding="longest", truncation=True, max_length=512, return_tensors="pt"
-            )
-            p_seqs = self.tokenizer(
-                eval_dataset["context"], padding="max_length", truncation=True, max_length=512, return_tensors="pt"
-            )
-
-            eval_dataset = TensorDataset(
-                p_seqs["input_ids"],
-                p_seqs["attention_mask"],
-                p_seqs["token_type_ids"],
-                q_seqs["input_ids"],
-                q_seqs["attention_mask"],
-                q_seqs["token_type_ids"],
-            )
-
-        return train_dataset, eval_dataset
-    # def prepare_in_batch_negative(
-    #     self,
-    #     num_neg = 2
-    # ):
-    #     self.num_neg = num_neg
-    #     corpus = np.array(self.contexts)
-    #     p_with_neg = []
-    #     for c in tqdm(self.dataset['train']['context']):
-    #         while True:
-    #             neg_ids = np.random.randint(len(corpus),size=num_neg)
-
-    #             if not c in corpus[neg_ids]:
-    #                 p_neg = corpus[neg_ids]
-
-    #                 p_with_neg.append(c)
-    #                 p_with_neg.extend(p_neg)
-    #                 break
-        
-    #     q_seqs = self.tokenizer(
-    #         self.dataset['train']['question'],
-    #         padding = "max_length",
-    #         truncation = True,
-    #         return_tensors = "pt"
-    #     )
-
-    #     p_seqs = self.tokenizer(
-    #         p_with_neg,
-    #         padding = "max_length",
-    #         truncation = True,
-    #         return_tensors = "pt"
-    #     )
-
-    #     max_len = p_seqs["input_ids"].size(-1)
-    #     # question 하나에 연결되는 묶음을 생성하는 부분
-    #     p_seqs["input_ids"] = p_seqs["input_ids"].view(-1, num_neg+1, max_len)
-    #     p_seqs["attention_mask"] = p_seqs["attention_mask"].view(-1, num_neg+1, max_len)
-    #     p_seqs["token_type_ids"] = p_seqs["token_type_ids"].view(-1, num_neg+1, max_len)
-
-    #     train_dataset = TensorDataset(
-    #         p_seqs["input_ids"], p_seqs["attention_mask"], p_seqs["token_type_ids"], 
-    #         q_seqs["input_ids"], q_seqs["attention_mask"], q_seqs["token_type_ids"]
-    #     )
-
-    #     self.train_dataloader = DataLoader(
-    #         train_dataset,
-    #         shuffle=True,
-    #         batch_size = 8 # 나중에 조정할 수 있도록 바꾸기
-    #     )
-
-    #     # 수정 필요할듯
-    #     # 
-    #     passage_seqs = tokenizer(
-    #         self.contexts,
-    #         padding="max_length",
-    #         truncation=True,
-    #         return_tensors="pt"
-    #     )
-    #     passage_dataset = TensorDataset(
-    #         passage_seqs["input_ids"],
-    #         passage_seqs["attention_mask"],
-    #         passage_seqs["token_type_ids"]
-    #     )
-    #     self.passage_dataloader = DataLoader(
-    #         passage_dataset,
-    #         batch_size=8
-    #     )
-    
-    def train(self,train_dataset,eval_dataset,args=None):
-        print("train start")
-        if args is None:
-            args = self.args
-
-        p_encoder = self.p_encoder.to('cuda')
-        q_encoder = self.q_encoder.to('cuda')
-
-        train_dataloader = DataLoader(
-            train_dataset, batch_size=args.per_device_train_batch_size
-        )
-        if eval_dataset:
-            eval_dataloader = DataLoader(
-                eval_dataset, batch_size=args.per_device_eval_batch_size
-            )
-
-        # Optimizer
-        optimizer_grouped_parameters = [{"params": p_encoder.parameters()}, {"params": q_encoder.parameters()}]
-        optimizer = AdamW(
-            optimizer_grouped_parameters,
-            lr=args.learning_rate,
-            eps=args.adam_epsilon
-        )
-        
-        t_total = len(train_dataloader) // args.gradient_accumulation_steps * args.num_train_epochs
-        scheduler = get_linear_schedule_with_warmup(
-            optimizer,
-            num_warmup_steps=args.warmup_steps,
-            num_training_steps=t_total
-        )
-
-        # Start training!
-        global_step = 0
-        torch.cuda.empty_cache()
-
-        train_iterator = tqdm(range(int(args.num_train_epochs)), desc="Epoch")
-        # train_iterator = tqdm(range(1), desc="Epoch")
-        for _ in train_iterator:
-            train_loss = 0.0
-            with tqdm(train_dataloader, unit="batch") as tepoch:
-                for batch in tepoch:
-
-                    p_encoder.train()
-                    q_encoder.train()
-            
-                    # p_inputs = {
-                    #     "input_ids": batch[0].view(batch_size * (self.num_neg + 1), -1).to('cuda'),
-                    #     "attention_mask": batch[1].view(batch_size * (self.num_neg + 1), -1).to('cuda'),
-                    #     "token_type_ids": batch[2].view(batch_size * (self.num_neg + 1), -1).to('cuda')
-                    # }
-            
-                    # q_inputs = {
-                    #     "input_ids": batch[3].to('cuda'),
-                    #     "attention_mask": batch[4].to('cuda'),
-                    #     "token_type_ids": batch[5].to('cuda')
-                    # }
-                    batch = tuple(t.to("cuda:0") for t in batch)
-                    p_inputs = {"input_ids": batch[0], "attention_mask": batch[1], "token_type_ids": batch[2]}
-                    q_inputs = {"input_ids": batch[3], "attention_mask": batch[4], "token_type_ids": batch[5]}
-
-                    p_outputs = p_encoder(**p_inputs)
-                    q_outputs = q_encoder(**q_inputs)
-                    
-                    sim_scores = torch.matmul(q_outputs['pooler_output'], torch.transpose(p_outputs['pooler_output'], 0, 1))
-                    targets = torch.arange(0, args.per_device_train_batch_size).long()
-
-                    if torch.cuda.is_available():
-                        targets = targets.to("cuda")
-                        sim_scores = sim_scores.to("cuda")
-
-                    # Calculate similarity score & loss
-                    sim_scores = F.log_softmax(sim_scores, dim=1)
-                    loss = F.nll_loss(sim_scores, targets)
-
-                    train_loss += loss.item()
-
-                    loss.backward()
-
-                    optimizer.step()
-                    scheduler.step()
-
-                    p_encoder.zero_grad()
-                    q_encoder.zero_grad()
-                    
-                    global_step += 1
-                    torch.cuda.empty_cache()
-                
-                print(f"\tTrain Loss: {train_loss / len(train_dataloader):.4f}")
-
-            if eval_dataset:
-                eval_loss = 0
-
-                p_encoder.eval()
-                q_encoder.eval()
-
-                with torch.no_grad():
-                    for idx, batch in enumerate(eval_dataloader):
-                        if torch.cuda.is_available():
-                            batch = tuple(t.cuda() for t in batch)
-
-                        p_inputs = {"input_ids": batch[0], "attention_mask": batch[1], "token_type_ids": batch[2]}
-                        q_inputs = {"input_ids": batch[3], "attention_mask": batch[4], "token_type_ids": batch[5]}
-
-                        p_outputs = p_encoder(**p_inputs)
-                        q_outputs = q_encoder(**q_inputs)
-
-                        sim_scores = torch.matmul(q_outputs['pooler_output'], torch.transpose(p_outputs['pooler_output'], 0, 1))
-                        targets = torch.arange(0, args.per_device_eval_batch_size).long()
-
-                        if torch.cuda.is_available():
-                            targets = targets.to("cuda")
-                            sim_scores = sim_scores.to("cuda")
-
-                        sim_scores = F.log_softmax(sim_scores, dim=1)
-
-                        loss = F.nll_loss(sim_scores, targets)
-
-                        eval_loss += loss.item()
-
-                    print(
-                        f"Eval Loss: {eval_loss / len(eval_dataloader):.4f}"
-                    )
-        return p_encoder, q_encoder
-
-    def get_embedding(self,p_encoder):
-        p_embedding = []
-
-        for passage in tqdm(self.contexts):
-            tokenized_passage = self.tokenizer(
-                passage, padding="max_length", truncation=True, max_length=512, return_tensors="pt"
-            ).to("cuda")
-            p_emb = p_encoder(**tokenized_passage)['pooler_output'].to("cpu").detach().numpy()
-            p_embedding.append(p_emb)
-        
-        p_embedding = np.array(p_embedding).squeeze()
-        return p_embedding
-
-    def get_relevant_doc_bulk(self,p_embedding,q_encoder, queries=None, topk=1):
-        q_encoder.eval()
-
-        if queries is None:
-            queries = self.test['question'][:10]
-
-        with torch.no_grad():
-            q_seqs_val = self.tokenizer(
-                queries, padding="longest", truncation=True, max_length=512, return_tensors="pt"
-            ).to("cuda")
-            q_embedding = q_encoder(**q_seqs_val)['pooler_output']
-            q_embedding.squeeze_()  # in-place
-            q_embedding = q_embedding.cpu().detach().numpy()
-
-        # p_embedding: numpy, q_embedding: numpy
-        result = np.matmul(q_embedding, p_embedding.T)
-        doc_indices = np.argsort(result, axis=1)[:, -topk:][:, ::-1]
-        doc_scores = []
-
-        for i in range(len(doc_indices)):
-            doc_scores.append(result[i][[doc_indices[i].tolist()]])
-    
-        return doc_scores, doc_indices
+    df = pd.DataFrame({'title':title,'text':text,'text_origin':text_origin})
+    return df    
 
 
 class SparseRetrieval(RetrievalBasic):
@@ -446,6 +187,92 @@ class SparseRetrieval(RetrievalBasic):
         elif self.embedding_form == "BM25":
             print("Allocate BM25 Object")
             self.bm25 = BM25Okapi(tqdm(self.contexts))
+
+        elif self.embedding_form == "ES":
+            print("Start Elastic Search")
+            es_server = Popen(['../elastic/elasticsearch-7.9.2/bin/elasticsearch'],
+                   stdout=PIPE, stderr=STDOUT,
+                   preexec_fn=lambda: os.setuid(1)
+                  )
+            self.es = Elasticsearch('localhost:9200')
+            self.es.indices.create(index = 'document',
+                  body = {
+                      'settings':{
+                          'analysis':{
+                              'analyzer':{
+                                  'my_analyzer':{
+                                      "type": "custom",
+                                      'tokenizer':'nori_tokenizer',
+                                      'decompound_mode':'mixed',
+                                      'stopwords':'_korean_',
+                                      'synonyms':'_korean_',
+                                      "filter": ["lowercase",
+                                                 "my_shingle_f",
+                                                 "nori_readingform",
+                                                 "nori_number",
+                                                 "cjk_bigram",
+                                                 "decimal_digit",
+                                                 "stemmer",
+                                                 "trim"]
+                                  }
+                              },
+                              'filter':{
+                                  'my_shingle_f':{
+                                      "type": "shingle"
+                                  }
+                              }
+                          },
+                          'similarity':{
+                              'my_similarity':{
+                                  'type':'BM25',
+                              }
+                          }
+                      },
+                      'mappings':{
+                          'properties':{
+                              'title':{
+                                  'type':'text',
+                                  'analyzer':'my_analyzer',
+                                  'similarity':'my_similarity'
+                              },
+                              'text':{
+                                  'type':'text',
+                                  'analyzer':'my_analyzer',
+                                  'similarity':'my_similarity'
+                              },
+                              'text_origin':{
+                                  'type':'text',
+                                  'analyzer':'my_analyzer',
+                                  'similarity':'my_similarity'
+                              }
+                          }
+                      }
+                  }
+            )
+
+            df = make_elastic_data()
+            buffer = []
+            rows = 0
+
+            for num in tqdm(range(len(df))):
+                article = {"_id": num,
+                        "_index": "document", 
+                        "title" : df['title'][num],
+                        "text" : df['text'][num],
+                        "text_origin" : df['text_origin'][num]}
+                buffer.append(article)
+                rows += 1
+                if rows % 3000 == 0:
+                    helpers.bulk(self.es, buffer)
+                    buffer = []
+                    print("Inserted {} articles".format(rows), end="\r")
+                    time.sleep(1)
+
+            if buffer:
+                helpers.bulk(self.es, buffer)
+
+            print("Total articles inserted: {}".format(rows))
+
 
 
     def build_faiss(self, num_clusters=64) -> NoReturn:
@@ -589,6 +416,12 @@ class SparseRetrieval(RetrievalBasic):
             doc_indices = sorted_result.tolist()[:k]
             return doc_score, doc_indices
 
+        elif self.embedding_form == "ES":
+            res = self.es.search(index = "document",q=query, size=k)
+            doc_score = [hit['_score'] for hit in res['hits']['hits']]
+            doc_indices = [hit['_id'] for hit in res['hits']['hits']]
+            return doc_score, doc_indices
+
     def get_relevant_doc_bulk(
         self, queries: List, k: Optional[int] = 1
     ) -> Tuple[List, List]:
@@ -630,6 +463,16 @@ class SparseRetrieval(RetrievalBasic):
                 doc_scores.append(result[i, :][sorted_result].tolist()[:k])
                 doc_indices.append(sorted_result.tolist()[:k])
             return doc_scores, doc_indices
+
+        elif self.embedding_form == "ES":
+            print("----- Start Calculate Elastic Search -----")
+            doc_score = []
+            doc_indices = []
+            for query in tqdm(queries):
+                res = self.es.search(index = "document",q=query, size=k)
+                doc_score.append([hit['_score'] for hit in res['hits']['hits']])
+                doc_indices.append([hit['_id'] for hit in res['hits']['hits']])
+            return doc_score, doc_indices
 
 
     def retrieve_faiss(

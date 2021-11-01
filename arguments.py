@@ -9,19 +9,19 @@ class ModelArguments:
     """
 
     model_name_or_path: str = field(
-        default="klue/roberta-large",
+        default="monologg/kobigbird-bert-base",
         metadata={
             "help": "Path to pretrained model or model identifier from huggingface.co/models"
         },
     )
     config_name: Optional[str] = field(
-        default="klue/roberta-large",
+        default="monologg/kobigbird-bert-base",
         metadata={
             "help": "Pretrained config name or path if not the same as model_name"
         },
     )
     tokenizer_name: Optional[str] = field(
-        default="klue/roberta-large",
+        default="monologg/kobigbird-bert-base",
         metadata={
             "help": "Pretrained tokenizer name or path if not the same as model_name"
         },
@@ -86,7 +86,7 @@ class DataTrainingArguments:
         default=128, metadata={"help": "Define how many clusters to use for faiss."}
     )
     top_k_retrieval: int = field(
-        default=30,
+        default=35,
         metadata={
             "help": "Define how many top-k passages to retrieve based on similarity."
         },
