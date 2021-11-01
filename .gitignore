@@ -13,7 +13,7 @@ models_result/
 data/
 outputs/
 notebooks/
-
+shells/
 
 # 파이썬 가상 환경
 .venv_mrc/
