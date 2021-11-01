@@ -174,3 +174,18 @@ class CustomArguments:
             "help": "whether overwrite or not"
         },
     )
+
+@dataclass
+class QuestionGenerationArguments:
+    """
+    Arguments for Question Generation
+    """
+    data_path: Optional[str] = field(
+        default= "../data/",
+        metadata={"help": "path for data"},
+    )
+
+    context_path: Optional[str] = field(
+        default= "wikipedia_documents.json",
+        metadata={"help": "exact path for wiki json file"},
+    )
