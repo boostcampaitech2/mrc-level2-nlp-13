@@ -29,3 +29,5 @@ nohup.outputs
 data/
 nohup.out
 *.log
+*.pickle
+*.csv
