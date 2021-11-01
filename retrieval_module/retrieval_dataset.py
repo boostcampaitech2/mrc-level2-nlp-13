@@ -1,9 +1,9 @@
 import re
 import torch
-
-from transformers import BertPreTrainedModel, BertModel
+import torch.nn as nn
 from torch.utils.data import Dataset
 
+from transformers import BertPreTrainedModel, BertModel, RobertaModel, RobertaConfig, RobertaPreTrainedModel
 
 class RetrievalTrainDataset(Dataset):
     def __init__(self, input_ids, attention_mask, q_input_ids, q_attention_mask):
@@ -43,12 +43,26 @@ class RetrievalValidDataset(Dataset):
     def __len__(self):
         return len(self.input_ids)
 
-class BertEncoder(BertPreTrainedModel):
+class RobertaEncoder(nn.Module):
+    def __init__(self, model_name) -> None:
+        super().__init__()
+        config = RobertaConfig().from_pretrained(model_name)
+        self.encoder = RobertaModel(config).from_pretrained(model_name)
+        self.dense = nn.Linear(768, 768, bias=True)
+
+    def forward(self, input_ids, attention_mask):
+        x = self.encoder(input_ids=input_ids, attention_mask=attention_mask)
+        x = nn.Tanh()(x.pooler_output)
+        x = self.dense(x)
+        x = nn.Tanh()(x)
+        return x
+
+class BertEncoder(RobertaPreTrainedModel):
     def __init__(self, config):
         super(BertEncoder, self).__init__(config)
 
-        self.bert = BertModel(config)
-        self.init_weights()
+        self.bert = RobertaModel(config)
+        #self.init_weights()
 
     def forward(self, input_ids, 
               attention_mask=None, token_type_ids=None): 

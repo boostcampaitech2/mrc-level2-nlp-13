@@ -7,6 +7,7 @@ from torch.utils.data import DataLoader
 from datasets import load_from_disk
 
 from retrieval_module.retrieval_dataset import RetrievalTrainDataset, RetrievalValidDataset
+from torch.utils.data import (DataLoader, RandomSampler, TensorDataset)
 
 def prepare_train_features_for_retriever(
     examples, 
@@ -75,16 +76,16 @@ def prepare_train_features_for_retriever(
             ):
                 tokenized_examples["labels"].append(1)
             else:
-                # token_start_index 및 token_end_index를 answer의 끝으로 이동합니다.
-                # Note: answer가 마지막 단어인 경우 last offset을 따라갈 수 있습니다(edge case).
-                while (
-                    token_start_index < len(offsets)
-                    and offsets[token_start_index][0] <= start_char
-                ):
-                    token_start_index += 1
+                # # token_start_index 및 token_end_index를 answer의 끝으로 이동합니다.
+                # # Note: answer가 마지막 단어인 경우 last offset을 따라갈 수 있습니다(edge case).
+                # while (
+                #     token_start_index < len(offsets)
+                #     and offsets[token_start_index][0] <= start_char
+                # ):
+                #     token_start_index += 1
 
-                while offsets[token_end_index][1] >= end_char:
-                    token_end_index -= 1
+                # while offsets[token_end_index][1] >= end_char:
+                #     token_end_index -= 1
                 tokenized_examples["labels"].append(0)
     return tokenized_examples
 
@@ -102,7 +103,7 @@ def sample_nagative(train_dataset, length, q_seqs, num_negative):
         negative_intput_temp = []
         negative_attention_temp = []
         flag = False
-        while tokenized_idx == idx and search_idx < len(train_dataset):
+        while tokenized_idx == idx:
             if train_dataset['labels'][search_idx] == 0 and flag == False:
                 positive_intput_temp.append(train_dataset['input_ids'][search_idx])
                 positive_attention_temp.append(train_dataset['attention_mask'][search_idx])
@@ -113,6 +114,7 @@ def sample_nagative(train_dataset, length, q_seqs, num_negative):
                 negative_attention_temp.append(train_dataset['attention_mask'][search_idx])
                 count += 1
             search_idx+=1
+            if search_idx >= len(train_dataset['input_ids']): break
             tokenized_idx = train_dataset['sample_mapping'][search_idx]
             if count >= num_negative:
                 break
@@ -154,6 +156,10 @@ def prepare_data(tokenizer, max_seq_length, num_negative):
     valid_dataset = datasets["validation"]
     valid_length = len(valid_dataset)
 
+    # print(valid_dataset[0]['question'])
+    # print(valid_dataset[0]['context'])
+    # print('-'*100)
+
     # Train 데이터 준비
         # query 토크나이징
     q_seqs = tokenizer(datasets["train"]['question'], max_length=80, padding="max_length", truncation=True, return_tensors='pt')
@@ -164,29 +170,46 @@ def prepare_data(tokenizer, max_seq_length, num_negative):
     context_column_name = "context" if "context" in column_names else column_names[1]
     answer_column_name = "answers" if "answers" in column_names else column_names[2]
         # context 토크나이징
-    train_dataset = prepare_train_features_for_retriever(train_dataset, tokenizer, 
+    train_dataset = prepare_train_features_for_retriever(valid_dataset, tokenizer, 
                     question_column_name, context_column_name, answer_column_name, max_seq_length)
     print('Train_data: ', len(train_dataset['labels']))
     #print('Train_data: ', train_dataset)
-    
-    positive_with_negative_context, attention_mask = sample_nagative(train_dataset, train_length, q_seqs, num_negative)
+    # print(tokenizer.decode(valid_q_seqs['input_ids'][0]))
+    # print(tokenizer.decode(train_dataset['input_ids'][0]))
+    # print(tokenizer.decode(train_dataset['input_ids'][1]))
+    # print(tokenizer.decode(train_dataset['input_ids'][2]))
+    # print(tokenizer.decode(train_dataset['input_ids'][3]))
+    # print('-'*100)
+
+    positive_with_negative_context, attention_mask = sample_nagative(train_dataset, valid_length, valid_q_seqs, num_negative)
     positive_with_negative_context = torch.tensor(positive_with_negative_context)
+    # print(positive_with_negative_context.size())
+    # print(tokenizer.decode(positive_with_negative_context[0]))
+    # print(tokenizer.decode(positive_with_negative_context[1]))
+    # print(tokenizer.decode(positive_with_negative_context[2]))
+    # print(tokenizer.decode(positive_with_negative_context[3]))
+    # print('-'*100)
+
     attention_mask = torch.tensor(attention_mask)
     max_len = positive_with_negative_context.size(-1)
     positive_with_negative_context = positive_with_negative_context.view(-1, num_negative, max_len)
-    attention_mask = positive_with_negative_context.view(-1, num_negative, max_len)
+    attention_mask = attention_mask.view(-1, num_negative, max_len)
 
-    train_dataset_context = RetrievalTrainDataset(positive_with_negative_context, attention_mask, q_seqs['input_ids'], q_seqs['attention_mask'])
-    train_dataloader = DataLoader(train_dataset_context, batch_size=4)
+    train_dataset_context = RetrievalTrainDataset(positive_with_negative_context, attention_mask, valid_q_seqs['input_ids'], valid_q_seqs['attention_mask'])
+    # print(tokenizer.decode(train_dataset_context[0][1]['input_ids']))
+    # print(tokenizer.decode(train_dataset_context[0][0]['input_ids'][0]))
+    # print(tokenizer.decode(train_dataset_context[0][0]['input_ids'][1]))
+    # print(tokenizer.decode(train_dataset_context[0][0]['input_ids'][2]))
+    train_sampler = RandomSampler(train_dataset_context)
+    train_dataloader = DataLoader(train_dataset_context, sampler=train_sampler,  batch_size=1)
     
     # Valid data 준비
     valid_dataset = prepare_train_features_for_retriever(valid_dataset, tokenizer, 
                     question_column_name, context_column_name, answer_column_name, max_seq_length)
     #print('Valid_dataset: ', valid_dataset)
     ground_truth = get_ground_truth(valid_dataset, valid_length)
-    
     valid = RetrievalValidDataset(torch.tensor(valid_dataset['input_ids']), torch.tensor(valid_dataset['attention_mask']))
-    valid_loader = DataLoader(valid, batch_size=8)
+    valid_loader = DataLoader(valid, batch_size=1)
     valid_q = RetrievalValidDataset(valid_q_seqs['input_ids'], valid_q_seqs['attention_mask'])
     valid_q_loader = DataLoader(valid_q, batch_size=1)
 
