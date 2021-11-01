@@ -21,7 +21,7 @@ class ModelArguments:
         },
     )
     tokenizer_name: Optional[str] = field(
-        default=None,
+        default="klue/bert-base",
         metadata={
             "help": "Pretrained tokenizer name or path if not the same as model_name"
         },
@@ -35,7 +35,7 @@ class DataTrainingArguments:
     """
 
     dataset_name: Optional[str] = field(
-        default="./data/train_dataset",
+        default="../data/train_dataset",
         metadata={"help": "The name of the dataset to use."},
     )
     overwrite_cache: bool = field(
@@ -82,7 +82,7 @@ class DataTrainingArguments:
         default=64, metadata={"help": "Define how many clusters to use for faiss."}
     )
     top_k_retrieval: int = field(
-        default=1,
+        default=35,
         metadata={
             "help": "Define how many top-k passages to retrieve based on similarity."
         },
@@ -127,7 +127,7 @@ class CustomArguments:
 
     # Training
     epochs: int = field(
-        default = 10,
+        default = 3,
         metadata={
             "help": "Training epoch"
         },

@@ -1153,6 +1153,20 @@ optional = false
 python-versions = ">=2.7,!=3.0.*,!=3.1.*,!=3.2.*,!=3.3.*,!=3.4.*,!=3.5.*"
 
 [[package]]
+name = "rank-bm25"
+version = "0.2.1"
+description = "Various BM25 algorithms for document ranking"
+category = "main"
+optional = false
+python-versions = "*"
+
+[package.dependencies]
+numpy = "*"
+
+[package.extras]
+dev = ["pytest"]
+
+[[package]]
 name = "regex"
 version = "2021.10.23"
 description = "Alternative regular expression module, to replace re."
@@ -1617,7 +1631,7 @@ termcolor = ">=1.1.0,<2.0.0"
 [metadata]
 lock-version = "1.1"
 python-versions = "^3.8"
-content-hash = "47cd3d5c4d89ad2c2ebdc14393b0365b3277bc22152e12b62977e8a06a68d6bd"
+content-hash = "afc991f7dc8653119d53ff120561ad7e07956952640b1aede69de98b4ef8a0ee"
 
 [metadata.files]
 aiohttp = [
@@ -2545,6 +2559,10 @@ qtconsole = [
 qtpy = [
     {file = "QtPy-1.11.2-py2.py3-none-any.whl", hash = "sha256:83c502973e9fdd7b648d8267a421229ea3d9a0651c22e4c65a4d9228479c39b6"},
     {file = "QtPy-1.11.2.tar.gz", hash = "sha256:d6e4ae3a41f1fcb19762b58f35ad6dd443b4bdc867a4cb81ef10ccd85403c92b"},
+]
+rank-bm25 = [
+    {file = "rank_bm25-0.2.1-py3-none-any.whl", hash = "sha256:6d2762b3e5607976487a3aa4377791056e1a45bcf3a00eae946f83529eb4f3bf"},
+    {file = "rank_bm25-0.2.1.tar.gz", hash = "sha256:51d8bc4556efd386298f9d076d4a7f20d50046acc93e37ef79243f515b9914b9"},
 ]
 regex = [
     {file = "regex-2021.10.23-cp310-cp310-macosx_10_9_x86_64.whl", hash = "sha256:45b65d6a275a478ac2cbd7fdbf7cc93c1982d613de4574b56fd6972ceadb8395"},

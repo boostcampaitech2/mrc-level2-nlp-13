@@ -17,6 +17,7 @@ outputs/
 
 # 파이썬 가상 환경
 .venv_mrc/
+predictions/
 
 # 모델 결과
 models/

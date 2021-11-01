@@ -12,7 +12,8 @@ from typing import List, Tuple, NoReturn, Any, Optional, Union
 
 
 from sklearn.feature_extraction.text import TfidfVectorizer
-
+from rank_bm25 import BM25Okapi
+from scipy import sparse as sp
 from datasets import (
     Dataset,
     load_from_disk,
@@ -53,110 +54,6 @@ class RetrievalBasic:
         self.q_embedding = None
         self.p_embedding = None  
         self.indexer = None
-
-class BM25:
-    """
-        BM25를 구현한 class 입니다.
-    """
-    def __init__(
-        self,
-        tokenizer,
-        ngram_range,
-        max_features,
-    ):
-        """
-            tokenizer, n_gram_range, max_features 초기화
-        """
-        self.tokenizer = tokenizer
-        self.ngram_range = ngram_range
-        self.max_features = max_features
-
-        self.vocab = None
-        self.term2idx = None
-        self.idx2term = None
-        
-        
-
-    def fit_transform(self, contexts, k=1.2, b=0.5):
-        # allocate contexts to class
-        self.contexts = contexts
-
-        # Tokenizing text
-        print("----- Tokenizing Contexts -----")
-        self.tokenized_contexts = list(map(self.tokenizer, tqdm(contexts)))
-
-        # Bulid Vocab
-        print("----- Bulid Vocab for BM25 score -----")
-        self.vocab = set([token for tokenized_context in tqdm(self.tokenized_contexts) for token in tokenized_context])
-        self.term2idx = {t : idx for idx, t in enumerate(self.vocab)}
-        self.idx2term = {idx : t for idx, t in enumerate(self.vocab)}
-
-        # Docs with idx
-        list2idx = lambda li : list(map(lambda tok : self.term2idx[tok] ,li))
-        docs = list(map(list2idx, tqdm(self.tokenized_contexts)))
-
-        # initiate TF & IDF array
-        self.TF = np.zeros((len(self.contexts),len(self.vocab)) , dtype=np.float32)
-        self.IDF = np.zeros((len(self.contexts),len(self.vocab)), dtype=np.float32)
-
-        # Calculate Term Frequency (TF)
-        print("----- Calculate TF Score -----")
-        for idx, doc in enumerate(tqdm(docs)):
-            for token_idx in doc:
-                self.TF[idx, token_idx]+=1
-
-        # Calculate Inverse Document Frequency (IDF)
-        print("----- Calculate IDF Score -----")
-        N = len(contexts)
-        
-        for voca in tqdm(self.vocab):
-            df_t = np.sum([self.term2idx[voca] in doc for doc in docs])
-            df_t = 1 if df_t == 0 else df_t
-            self.IDF[:,self.term2idx[voca]] = np.log(N / df_t)
-
-        # Calculate BM25 vector matrix
-        print("----- Calculate BM25 Score -----")
-        contexts_len = np.array(list(map(len, contexts)))
-        avg_contexts_len = np.mean(contexts_len)
-
-        p_div = self.IDF * self.TF * (k + 1)
-        div = self.TF + (k * (1 - b + b * contexts_len / avg_contexts_len)).reshape(-1,1)
-
-        BM25_matrix = p_div / div
-
-        self.BM25_matrix = BM25_matrix
-
-        return BM25_matrix
-
-    def transform(self, querys:List[str]):
-        assert self.vocab, "Contexts에 아직 fitting되지 않았습니다."
-        
-        # Tokenize Querys
-        tokenized_querys = list(map(self.tokenizer, querys))
-    
-        # initiate TF & IDF array
-        TF = np.zeros((len(querys),len(self.vocab)), dtype=np.float32)
-        IDF = np.zeros((len(querys),len(self.vocab)), dtype=np.float32)
-
-        # Calculate Term Frequency (TF)
-        print("----- Calculate TF Score -----")
-        for idx, tokenized_query in enumerate(tqdm(tokenized_querys)):
-            for token in tokenized_query:
-                TF[idx, self.term2idx[token]]+=1
-
-        # Calculate Inverse Document Frequency (IDF)
-        print("----- Calculate IDF Score -----")
-        N = len(self.contexts)
-        for idx, tokenized_query in enumerate(tqdm(tokenized_querys)):
-            for token in tokenized_query:
-                df_t = np.sum([token in doc for doc in self.tokenized_contexts])
-                df_t = 1 if df_t == 0 else df_t
-                IDF[idx ,self.term2idx[token]] = np.log(N / df_t)
-
-        q_embedding = TF * IDF
-
-        return q_embedding
-
 
 class SparseRetrieval(RetrievalBasic):
     def __init__(
@@ -200,11 +97,7 @@ class SparseRetrieval(RetrievalBasic):
             max_features=50000,
         )
 
-        self.bm25 = BM25(
-            tokenizer=self.tokenizer,
-            ngram_range=(1, 2),
-            max_features=50000,
-        )
+        self.bm25 = None
 
         # Set default variables
         self.embedding_type = {
@@ -222,7 +115,7 @@ class SparseRetrieval(RetrievalBasic):
             만약 미리 저장된 파일이 있으면 저장된 pickle을 불러옵니다.
         """
         # 파일 이름 및 경로 설정
-        pickle_name = f"sparse_embedding.bin"
+        pickle_name = f"sparse_embedding_{self.embedding_form}.bin"
         emd_path = os.path.join(self.data_path, pickle_name)
 
         # Pickle을 저장합니다.
@@ -248,25 +141,8 @@ class SparseRetrieval(RetrievalBasic):
                 print("Embedding pickle saved.")
 
         elif self.embedding_form == "BM25":
-
-            bm25_name = f"bm25.bin"
-            bm25_path = os.path.join(self.data_path, bm25_name)
-
-            if os.path.isfile(emd_path) and os.path.isfile(bm25_path):
-                with open(emd_path, "rb") as file:
-                    self.p_embedding = pickle.load(file)
-                with open(bm25_path, "rb") as file:
-                    self.bm25 = pickle.load(file)
-                print("Embedding pickle load.")
-            else:
-                print(f"Build passage embedding for {self.embedding_form}")
-                self.p_embedding = self.bm25.fit_transform(self.contexts)
-                print(self.p_embedding.shape)
-                with open(emd_path, "wb") as file:
-                    pickle.dump(self.p_embedding, file)
-                with open(bm25_path, "wb") as file:
-                    pickle.dump(self.bm25, file)
-                print("Embedding pickle saved.")
+            print("Allocate BM25 Object")
+            self.bm25 = BM25Okapi(tqdm(self.contexts))
 
 
     def build_faiss(self, num_clusters=64) -> NoReturn:
@@ -329,9 +205,11 @@ class SparseRetrieval(RetrievalBasic):
                 Ground Truth가 있는 Query (train/valid) -> 기존 Ground Truth Passage를 같이 반환합니다.
                 Ground Truth가 없는 Query (test) -> Retrieval한 Passage만 반환합니다.
         """
-
-        assert self.p_embedding is not None, "get_sparse_embedding() 메소드를 먼저 수행해줘야합니다."
-
+        if self.embedding_form == "TF-IDF":
+            assert self.p_embedding is not None, "get_sparse_embedding() 메소드를 먼저 수행해줘야합니다."
+        elif self.embedding_form == "BM25":
+            pass
+    
         if isinstance(query_or_dataset, str):
             doc_scores, doc_indices = self.get_relevant_doc(query_or_dataset, k=topk)
             print("[Search query]\n", query_or_dataset, "\n")
@@ -371,7 +249,7 @@ class SparseRetrieval(RetrievalBasic):
 
             cqas = pd.DataFrame(total)
             return cqas
-
+        
     def get_relevant_doc(self, query: str, k: Optional[int] = 1) -> Tuple[List, List]:
 
         """
@@ -383,22 +261,30 @@ class SparseRetrieval(RetrievalBasic):
         Note:
             vocab 에 없는 이상한 단어로 query 하는 경우 assertion 발생 (예) 뙣뙇?
         """
+        if self.embedding_form == "TF-IDF":
+            with timer("transform"):
+                query_vec = self.tfidfv.transform([query])
+            assert (
+                np.sum(query_vec) != 0
+            ), "오류가 발생했습니다. 이 오류는 보통 query에 vectorizer의 vocab에 없는 단어만 존재하는 경우 발생합니다."
 
-        with timer("transform"):
-            query_vec = self.embedding_type[self.embedding_form].transform([query])
-        assert (
-            np.sum(query_vec) != 0
-        ), "오류가 발생했습니다. 이 오류는 보통 query에 vectorizer의 vocab에 없는 단어만 존재하는 경우 발생합니다."
+            with timer("query ex search"):
+                result = query_vec * self.p_embedding.T
+            if not isinstance(result, np.ndarray):
+                result = result.toarray()
+        
+            sorted_result = np.argsort(result.squeeze())[::-1]
+            doc_score = result.squeeze()[sorted_result].tolist()[:k]
+            doc_indices = sorted_result.tolist()[:k]
 
-        with timer("query ex search"):
-            result = query_vec * self.p_embedding.T
-        if not isinstance(result, np.ndarray):
-            result = result.toarray()
+            return doc_score, doc_indices
 
-        sorted_result = np.argsort(result.squeeze())[::-1]
-        doc_score = result.squeeze()[sorted_result].tolist()[:k]
-        doc_indices = sorted_result.tolist()[:k]
-        return doc_score, doc_indices
+        elif self.embedding_form == "BM25":
+            result = self.bm25.get_scores(query)
+            sorted_result = np.argsort(result)[::-1]
+            doc_score = result[sorted_result].tolist()[:k]
+            doc_indices = sorted_result.tolist()[:k]
+            return doc_score, doc_indices
 
     def get_relevant_doc_bulk(
         self, queries: List, k: Optional[int] = 1
@@ -413,22 +299,35 @@ class SparseRetrieval(RetrievalBasic):
         Note:
             vocab 에 없는 이상한 단어로 query 하는 경우 assertion 발생 (예) 뙣뙇?
         """
+        if self.embedding_form == "TF-IDF":
+            query_vec = self.tfidfv.transform(queries)
+            assert (
+                np.sum(query_vec) != 0
+            ), "오류가 발생했습니다. 이 오류는 보통 query에 vectorizer의 vocab에 없는 단어만 존재하는 경우 발생합니다."
 
-        query_vec = self.embedding_type[self.embedding_form].transform(queries)
-        assert (
-            np.sum(query_vec) != 0
-        ), "오류가 발생했습니다. 이 오류는 보통 query에 vectorizer의 vocab에 없는 단어만 존재하는 경우 발생합니다."
+            result = query_vec * self.p_embedding.T
+            if not isinstance(result, np.ndarray):
+                result = result.toarray()
+            doc_scores = []
+            doc_indices = []
+            for i in range(result.shape[0]):
+                sorted_result = np.argsort(result[i, :])[::-1]
+                doc_scores.append(result[i, :][sorted_result].tolist()[:k])
+                doc_indices.append(sorted_result.tolist()[:k])
+            return doc_scores, doc_indices
 
-        result = query_vec * self.p_embedding.T
-        if not isinstance(result, np.ndarray):
-            result = result.toarray()
-        doc_scores = []
-        doc_indices = []
-        for i in range(result.shape[0]):
-            sorted_result = np.argsort(result[i, :])[::-1]
-            doc_scores.append(result[i, :][sorted_result].tolist()[:k])
-            doc_indices.append(sorted_result.tolist()[:k])
-        return doc_scores, doc_indices
+        elif self.embedding_form == "BM25":
+            print("----- Start Calculate BM25 -----")
+            result = np.array(list(map(self.bm25.get_scores, tqdm(queries))))
+
+            doc_scores = []
+            doc_indices = []
+            for i in range(result.shape[0]):
+                sorted_result = np.argsort(result[i, :])[::-1]
+                doc_scores.append(result[i, :][sorted_result].tolist()[:k])
+                doc_indices.append(sorted_result.tolist()[:k])
+            return doc_scores, doc_indices
+
 
     def retrieve_faiss(
         self, query_or_dataset: Union[str, Dataset], topk: Optional[int] = 1
@@ -616,6 +515,7 @@ if __name__ == "__main__":
 
     else:
         with timer("bulk query by exhaustive search"):
+            print("Start retirieve")
             df = retriever.retrieve(full_ds)
             df["correct"] = df["original_context"] == df["context"]
             print(
