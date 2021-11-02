@@ -79,7 +79,7 @@ class SparseRetrieval(RetrievalBasic):
             context_path:
                 Passage들이 묶여있는 파일명입니다.
 
-            embedding_fn:
+            embedding_form:
                 Sparse embedding의 함수를 결정합니다 TF-IDF, BM25 중 고를 수 있습니다.
 
             data_path/context_path가 존재해야합니다.
@@ -142,7 +142,8 @@ class SparseRetrieval(RetrievalBasic):
 
         elif self.embedding_form == "BM25":
             print("Allocate BM25 Object")
-            self.bm25 = BM25Okapi(tqdm(self.contexts))
+            tokenized_contexts = list(map(self.tokenizer, self.contexts))
+            self.bm25 = BM25Okapi(tqdm(tokenized_contexts))
 
 
     def build_faiss(self, num_clusters=64) -> NoReturn:
@@ -280,11 +281,16 @@ class SparseRetrieval(RetrievalBasic):
             return doc_score, doc_indices
 
         elif self.embedding_form == "BM25":
-            result = self.bm25.get_scores(query)
+
+            tokenized_query = self.tokenizer(query)
+            result = self.bm25.get_scores(tokenized_query)
+            
             sorted_result = np.argsort(result)[::-1]
             doc_score = result[sorted_result].tolist()[:k]
             doc_indices = sorted_result.tolist()[:k]
+
             return doc_score, doc_indices
+        
 
     def get_relevant_doc_bulk(
         self, queries: List, k: Optional[int] = 1
@@ -318,7 +324,10 @@ class SparseRetrieval(RetrievalBasic):
 
         elif self.embedding_form == "BM25":
             print("----- Start Calculate BM25 -----")
-            result = np.array(list(map(self.bm25.get_scores, tqdm(queries))))
+            print("----- Tokenize querys -----")
+            tokenized_queries = list(map(self.tokenizer, tqdm(queries)))
+            print("----- get scores from querys -----")
+            result = np.array(list(map(self.bm25.get_scores, tqdm(tokenized_queries))))
 
             doc_scores = []
             doc_indices = []
