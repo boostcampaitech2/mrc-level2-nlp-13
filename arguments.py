@@ -98,6 +98,10 @@ class DataTrainingArguments:
     use_faiss: bool = field(
         default=False, metadata={"help": "Whether to build with faiss"}
     )
+    use_validation_data: bool = field(
+        default=False,
+        metadata={"help": "Whether to train with validation set"},
+    )
 
 @dataclass
 class CustomArguments:
