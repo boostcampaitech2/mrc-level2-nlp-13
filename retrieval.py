@@ -33,7 +33,7 @@ from transformers import (
     TrainingArguments,
 )
 from subprocess import Popen, PIPE, STDOUT
-from elasticsearch import Elasticsearch
+from elasticsearch import Elasticsearch, helpers
 
 @contextmanager
 def timer(name):
@@ -190,12 +190,16 @@ class SparseRetrieval(RetrievalBasic):
 
         elif self.embedding_form == "ES":
             print("Start Elastic Search")
+
             es_server = Popen(['../elastic/elasticsearch-7.9.2/bin/elasticsearch'],
                    stdout=PIPE, stderr=STDOUT,
                    preexec_fn=lambda: os.setuid(1)
                   )
-            self.es = Elasticsearch('localhost:9200')
-            self.es.indices.create(index = 'document',
+            time.sleep(30)
+            es = Elasticsearch('localhost:9200')
+            if es.indices.exists('document'):
+                es.indices.delete(index='document')
+            es.indices.create(index = 'document',
                   body = {
                       'settings':{
                           'analysis':{
@@ -224,7 +228,8 @@ class SparseRetrieval(RetrievalBasic):
                           },
                           'similarity':{
                               'my_similarity':{
-                                  'type':'BM25',
+                                #   'type':'BM25',
+                                  'type':'boolean',
                               }
                           }
                       },
@@ -263,14 +268,15 @@ class SparseRetrieval(RetrievalBasic):
                 buffer.append(article)
                 rows += 1
                 if rows % 3000 == 0:
-                    helpers.bulk(self.es, buffer)
+                    helpers.bulk(es, buffer)
                     buffer = []
                     print("Inserted {} articles".format(rows), end="\r")
                     time.sleep(1)
 
             if buffer:
-                helpers.bulk(self.es, buffer)
+                helpers.bulk(es, buffer)
 
+            self.es = es
             print("Total articles inserted: {}".format(rows))
 
 
@@ -470,8 +476,11 @@ class SparseRetrieval(RetrievalBasic):
             doc_indices = []
             for query in tqdm(queries):
                 res = self.es.search(index = "document",q=query, size=k)
+                # print([hit['_score'] for hit in res['hits']['hits']])
+                # print([int(hit['_id']) for hit in res['hits']['hits']])
                 doc_score.append([hit['_score'] for hit in res['hits']['hits']])
-                doc_indices.append([hit['_id'] for hit in res['hits']['hits']])
+                doc_indices.append([int(hit['_id']) for hit in res['hits']['hits']])
+            
             return doc_score, doc_indices
 
 

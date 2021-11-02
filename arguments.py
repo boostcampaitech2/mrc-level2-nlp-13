@@ -1,7 +1,11 @@
 from dataclasses import asdict, dataclass, field
 from typing import Any, Dict, List, Optional
 
-
+# monologg/koelectra-base-v3-finetuned-korquad 
+# epoch 10 - 60.8
+# epoch 20 - 
+# monologg/kobigbird-bert-base 
+# epoch 10 - 61.6
 @dataclass
 class ModelArguments:
     """
@@ -9,19 +13,19 @@ class ModelArguments:
     """
 
     model_name_or_path: str = field(
-        default="monologg/kobigbird-bert-base",
+        default="monologg/koelectra-base-v3-finetuned-korquad",
         metadata={
             "help": "Path to pretrained model or model identifier from huggingface.co/models"
         },
     )
     config_name: Optional[str] = field(
-        default="monologg/kobigbird-bert-base",
+        default="monologg/koelectra-base-v3-finetuned-korquad",
         metadata={
             "help": "Pretrained config name or path if not the same as model_name"
         },
     )
     tokenizer_name: Optional[str] = field(
-        default="monologg/kobigbird-bert-base",
+        default="monologg/koelectra-base-v3-finetuned-korquad",
         metadata={
             "help": "Pretrained tokenizer name or path if not the same as model_name"
         },
@@ -117,7 +121,7 @@ class CustomArguments:
         },
     )
     wandb_run_name: str = field(
-        default="Roberta-large_v0.1",
+        default="elastic-kobigbird",
         metadata={
             "help": "run name in WandB E.g. Bart_v0.1, Roberta_v0.1, DPR_Bert_v0.1"
         },
@@ -131,7 +135,7 @@ class CustomArguments:
 
     # Training
     epochs: int = field(
-        default = 1,
+        default = 10,
         metadata={
             "help": "Training epoch"
         },
