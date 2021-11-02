@@ -46,7 +46,7 @@ class DataTrainingArguments:
         metadata={"help": "The number of processes to use for the preprocessing."},
     )
     max_seq_length: int = field(
-        default=384,
+        default=450,
         metadata={
             "help": "The maximum total input sequence length after tokenization. Sequences longer "
             "than this will be truncated, sequences shorter will be padded."
@@ -85,7 +85,7 @@ class DataTrainingArguments:
         default=128, metadata={"help": "Define how many clusters to use for faiss."}
     )
     top_k_retrieval: int = field(
-        default=35,
+        default=100,
         metadata={
             "help": "Define how many top-k passages to retrieve based on similarity."
         },
@@ -106,6 +106,7 @@ class DataTrainingArguments:
         metadata={
             "help": "Path to pretrained model"
         },
+
     )
     dense_question_retrieval_name: str = field(
         default="./models_result/roberta_small_dense_retireval_v2/best/q_encoder",
