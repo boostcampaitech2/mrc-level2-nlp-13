@@ -15,13 +15,13 @@ class ModelArguments:
         },
     )
     config_name: Optional[str] = field(
-        default="klue/roberta-large",
+        default="klue/bert-base",
         metadata={
             "help": "Pretrained config name or path if not the same as model_name"
         },
     )
     tokenizer_name: Optional[str] = field(
-        default="klue/roberta-large",
+        default="klue/bert-base",
         metadata={
             "help": "Pretrained tokenizer name or path if not the same as model_name"
         },
@@ -135,7 +135,7 @@ class CustomArguments:
 
     # Training
     epochs: int = field(
-        default = 1,
+        default = 3,
         metadata={
             "help": "Training epoch"
         },
