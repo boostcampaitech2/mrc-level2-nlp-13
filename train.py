@@ -219,7 +219,7 @@ def run_mrc(
         if "train" not in datasets:
             raise ValueError("--do_train requires a train dataset")
 
-        if hasattr(data_args, 'use_validation_data') and data_args.use_validation_data:
+        if data_args.use_validation_data:
             train_dataset = concatenate_datasets([datasets['train'], datasets['validation']])
         else:
             train_dataset = datasets["train"]
