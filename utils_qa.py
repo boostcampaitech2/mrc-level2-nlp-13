@@ -220,7 +220,7 @@ def postprocess_qa_predictions(
         # offset을 사용하여 original context에서 answer text를 수집합니다.
         context = example["context"]
         for pred in predictions:
-            offsets = pred.pop("offsets")
+            offsets = pred["offsets"]
             pred["text"] = context[offsets[0] : offsets[1]]
 
         # rare edge case에는 null이 아닌 예측이 하나도 없으며 failure를 피하기 위해 fake prediction을 만듭니다.
