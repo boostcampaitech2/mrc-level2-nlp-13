@@ -15,13 +15,13 @@ class ModelArguments:
         },
     )
     config_name: Optional[str] = field(
-        default="klue/bert-base",
+        default="klue/roberta-large",
         metadata={
             "help": "Pretrained config name or path if not the same as model_name"
         },
     )
     tokenizer_name: Optional[str] = field(
-        default="klue/bert-base",
+        default="klue/roberta-large",
         metadata={
             "help": "Pretrained tokenizer name or path if not the same as model_name"
         },
@@ -94,7 +94,7 @@ class DataTrainingArguments:
         default=False, metadata={"help": "Whether to build with faiss"}
     )
     use_validation_data: bool = field(
-        default=False,
+        default=True,
         metadata={"help": "Whether to train with validation set"},
     )
 
@@ -119,7 +119,7 @@ class DataTrainingArguments:
         },
     )
     dense_train_epoch: int = field(
-        default=20,
+        default=30,
         metadata={
             "help": "Epochs"
         },
@@ -136,8 +136,14 @@ class DataTrainingArguments:
             "help": "learning_rate for training"
         },
     )
+    dense_max_length: int = field(
+        default=500,
+        metadata={
+            "help": "batch size for train DataLoader"
+        },
+    )
     dense_train_output_dir: str = field(
-        default="./models_result/roberta_small_dense_retireval_v2/",
+        default="./models_result/roberta_small_dense_retireval_v3/",
         metadata={
             "help": "save directory"
         },
@@ -161,13 +167,13 @@ class CustomArguments:
         },
     )
     project_name: str = field(
-        default="mrc_test",
+        default="mrc_test_retrieval",
         metadata={
             "help": "Your project name in WandB E.g. LKH, Readers, ..."
         },
     )
     wandb_run_name: str = field(
-        default="Roberta-large_v0.1",
+        default="Dense-roberta-small_v0.2",
         metadata={
             "help": "run name in WandB E.g. Bart_v0.1, Roberta_v0.1, DPR_Bert_v0.1"
         },

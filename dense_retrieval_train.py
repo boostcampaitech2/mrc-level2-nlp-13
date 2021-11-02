@@ -37,7 +37,7 @@ def train(tokenizer, q_encoder, p_encoder, optimizer, scheduler, train_dataloade
         train_loss = train_per_epoch(q_encoder, p_encoder, optimizer, epoch_iterator, data_args)
         
         # Valid
-        top_1_acc, top_3_acc, top_10_acc, top_35_acc, top_100_acc = valid_per_epoch(tokenizer, p_encoder, q_encoder, valid_context, valid_question)
+        top_1_acc, top_3_acc, top_10_acc, top_35_acc, top_100_acc = valid_per_epoch(tokenizer, p_encoder, q_encoder, valid_context, valid_question, data_args)
 
         # logging
         print(f'epoch: {epoch} | train_loss:{train_loss:.5f} | '
@@ -111,7 +111,7 @@ def train_per_epoch(q_encoder, p_encoder, optimizer, epoch_iterator, data_args):
       sim_scores = torch.matmul(q_outputs, torch.transpose(p_outputs, 0, 1))  # (batch_size, emb_dim) x (emb_dim, batch_size) = (batch_size, batch_size)
 
       # target: position of positive samples = diagonal element 
-      targets = torch.arange(0, data_args.dense_train_batch_size).long()
+      targets = torch.arange(0, len(batch[0])).long()
       if torch.cuda.is_available():
         targets = targets.to('cuda')
 
@@ -128,14 +128,14 @@ def train_per_epoch(q_encoder, p_encoder, optimizer, epoch_iterator, data_args):
       torch.cuda.empty_cache()
     return batch_loss / len(epoch_iterator)
 
-def valid_per_epoch(tokenizer, p_encoder, q_encoder, valid_context, valid_question):
+def valid_per_epoch(tokenizer, p_encoder, q_encoder, valid_context, valid_question, data_args):
     print(f'Valid start!')
     with torch.no_grad():
         p_encoder.eval()
 
         p_embs = []
         for p in valid_context:
-            p = tokenizer(p, padding="max_length", truncation=True, return_tensors='pt').to('cuda')
+            p = tokenizer(p, max_length=data_args.dense_max_length, padding="max_length", truncation=True, return_tensors='pt').to('cuda')
             p_emb = p_encoder(**p).pooler_output.to('cpu').numpy()
             p_embs.append(p_emb)
 
@@ -151,7 +151,7 @@ def valid_per_epoch(tokenizer, p_encoder, q_encoder, valid_context, valid_questi
     for sample_idx in tqdm(range(len(valid_question))):
         query = valid_question[sample_idx]
 
-        q_seqs_val = tokenizer([query], padding="max_length", truncation=True, return_tensors='pt').to('cuda')
+        q_seqs_val = tokenizer([query], max_length=80, padding="max_length", truncation=True, return_tensors='pt').to('cuda')
         q_emb = q_encoder(**q_seqs_val).pooler_output.to('cpu')  #(num_query, emb_dim)
 
         dot_prod_scores = torch.matmul(q_emb, torch.transpose(p_embs, 0, 1))
@@ -189,7 +189,7 @@ def main():
 
     # 학습 및 검증 데이터 준비
     print('Loading data')
-    train_dataloader, valid_context, valid_question = prepare_data(tokenizer, data_args.dense_train_batch_size, data_args.max_seq_length)
+    train_dataloader, valid_context, valid_question = prepare_data(tokenizer, data_args.dense_train_batch_size, data_args.dense_max_length)
  
     # 모델 준비
     print('Loading models')

@@ -3,7 +3,7 @@ import numpy as np
 from tqdm import tqdm
 
 import torch
-from torch.utils.data import DataLoader
+from torch.utils.data import DataLoader, ConcatDataset
 from datasets import load_from_disk
 
 from retrieval_module.retrieval_dataset import RetrievalTrainDataset, RetrievalValidDataset
@@ -139,15 +139,23 @@ def get_ground_truth(valid_dataset, length):
             t_idx = valid_dataset['sample_mapping'][search_idx]
     return ground_truth
 
-def prepare_data(tokenizer, batch_size, max_seq_length):
+def prepare_data(tokenizer, batch_size, dense_max_length):
     datasets = load_from_disk('/opt/ml/git/mrc-level2-nlp-13/data/train_dataset/')
+    wiki_datasets = load_from_disk('/opt/ml/git/mrc-level2-nlp-13/data/wiki')
+    
+    print('data:', datasets)
+    print('wiki:',wiki_datasets)    
+
     train_dataset = datasets["train"]
     valid_dataset = datasets["validation"]
 
-    q_seqs = tokenizer(train_dataset['question'], max_length=max_seq_length, padding="max_length", truncation=True, return_tensors='pt')
-    p_seqs = tokenizer(train_dataset['context'], max_length=max_seq_length, padding="max_length", truncation=True, return_tensors='pt')
+    #train_dataset = ConcatDataset([train_dataset, wiki_datasets])
 
-    
+    #q_seqs = tokenizer(train_dataset['question'], max_length=80, padding="max_length", truncation=True, return_tensors='pt')
+    q_seqs = tokenizer(list(np.concatenate([datasets['train']['question'], wiki_datasets['question']], axis=0)), max_length=80, padding="max_length", truncation=True, return_tensors='pt')
+    #p_seqs = tokenizer(train_dataset['context'], max_length=dense_max_length, padding="max_length", truncation=True, return_tensors='pt')
+    p_seqs = tokenizer(list(np.concatenate([datasets['train']['context'], wiki_datasets['context']], axis=0)), max_length=dense_max_length, padding="max_length", truncation=True, return_tensors='pt')
+
     # Train 데이터 준비
     train_dataset = TensorDataset(p_seqs['input_ids'], p_seqs['attention_mask'], p_seqs['token_type_ids'], 
                         q_seqs['input_ids'], q_seqs['attention_mask'], q_seqs['token_type_ids'])
