@@ -19,6 +19,8 @@ wandb = "^0.12.5"
 ipykernel = "^6.4.2"
 jupyter = "^1.0.0"
 rank-bm25 = "^0.2.1"
+matplotlib = "^3.4.3"
+seaborn = "^0.11.2"
 
 [tool.poetry.dev-dependencies]
 
