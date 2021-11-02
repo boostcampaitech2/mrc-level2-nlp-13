@@ -15,13 +15,13 @@ class ModelArguments:
         },
     )
     config_name: Optional[str] = field(
-        default="klue/roberta-large",
+        default="klue/bert-base",
         metadata={
             "help": "Pretrained config name or path if not the same as model_name"
         },
     )
     tokenizer_name: Optional[str] = field(
-        default="klue/roberta-large",
+        default="klue/bert-base",
         metadata={
             "help": "Pretrained tokenizer name or path if not the same as model_name"
         },
@@ -92,6 +92,10 @@ class DataTrainingArguments:
     )
     use_faiss: bool = field(
         default=False, metadata={"help": "Whether to build with faiss"}
+    )
+    use_validation_data: bool = field(
+        default=False,
+        metadata={"help": "Whether to train with validation set"},
     )
 
     # For Dense retrieval
@@ -177,7 +181,7 @@ class CustomArguments:
 
     # Training
     epochs: int = field(
-        default = 10,
+        default = 3,
         metadata={
             "help": "Training epoch"
         },
