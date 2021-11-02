@@ -27,7 +27,6 @@ class ModelArguments:
         },
     )
 
-
 @dataclass
 class DataTrainingArguments:
     """
@@ -35,7 +34,7 @@ class DataTrainingArguments:
     """
 
     dataset_name: Optional[str] = field(
-        default="../data/train_dataset",
+        default="./data/train_dataset",
         metadata={"help": "The name of the dataset to use."},
     )
     overwrite_cache: bool = field(
@@ -79,14 +78,14 @@ class DataTrainingArguments:
         metadata={"help": "Whether to run passage retrieval using sparse embedding."},
     )
     kind_of_retrieval: str = field(
-        default='Sparse', #SparseDense
+        default='Dense', #SparseDense
         metadata={"help": "Kind of retrieval."},
     )
     num_clusters: int = field(
         default=128, metadata={"help": "Define how many clusters to use for faiss."}
     )
     top_k_retrieval: int = field(
-        default=30,
+        default=35,
         metadata={
             "help": "Define how many top-k passages to retrieve based on similarity."
         },
@@ -94,6 +93,52 @@ class DataTrainingArguments:
     use_faiss: bool = field(
         default=False, metadata={"help": "Whether to build with faiss"}
     )
+
+    # For Dense retrieval
+    dense_base_model: str = field(
+        default="klue/roberta-small",
+        metadata={
+            "help": "Path to pretrained model or model identifier from huggingface.co/models"
+        },
+    )
+    dense_passage_retrieval_name: str = field(
+        default="./models_result/roberta_small_dense_retireval_v2/best/p_encoder",
+        metadata={
+            "help": "Path to pretrained model"
+        },
+    )
+    dense_question_retrieval_name: str = field(
+        default="./models_result/roberta_small_dense_retireval_v2/best/q_encoder",
+        metadata={
+            "help": "Path to pretrained model"
+        },
+    )
+    dense_train_epoch: int = field(
+        default=20,
+        metadata={
+            "help": "Epochs"
+        },
+    )
+    dense_train_batch_size: int = field(
+        default=8,
+        metadata={
+            "help": "batch size for train DataLoader"
+        },
+    )
+    dense_train_learning_rate: float = field(
+        default=2e-5,
+        metadata={
+            "help": "learning_rate for training"
+        },
+    )
+    dense_train_output_dir: str = field(
+        default="./models_result/roberta_small_dense_retireval_v2/",
+        metadata={
+            "help": "save directory"
+        },
+    )
+    
+    
 
 @dataclass
 class CustomArguments:
@@ -131,7 +176,7 @@ class CustomArguments:
 
     # Training
     epochs: int = field(
-        default = 1,
+        default = 10,
         metadata={
             "help": "Training epoch"
         },
