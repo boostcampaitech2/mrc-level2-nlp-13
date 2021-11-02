@@ -4,7 +4,7 @@ import sys
 
 from typing import List, Callable, NoReturn, NewType, Any
 import dataclasses
-from datasets import load_metric, load_from_disk, Dataset, DatasetDict
+from datasets import load_metric, load_from_disk, concatenate_datasets, Dataset, DatasetDict
 
 from transformers import AutoConfig, AutoModelForQuestionAnswering, AutoTokenizer
 
@@ -218,7 +218,13 @@ def run_mrc(
     if training_args.do_train:
         if "train" not in datasets:
             raise ValueError("--do_train requires a train dataset")
-        train_dataset = datasets["train"]
+
+        if hasattr(data_args, 'use_validation_data') and data_args.use_validation_data:
+            train_dataset = concatenate_datasets([datasets['train'], datasets['validation']])
+        else:
+            train_dataset = datasets["train"]
+
+        print(train_dataset)
 
         # dataset에서 train feature를 생성합니다.
         train_dataset = train_dataset.map(
