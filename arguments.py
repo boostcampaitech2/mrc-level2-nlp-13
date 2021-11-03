@@ -2,10 +2,15 @@ from dataclasses import asdict, dataclass, field
 from typing import Any, Dict, List, Optional
 
 # monologg/koelectra-base-v3-finetuned-korquad 
-# epoch 10 - 60.8
-# epoch 20 - 
-# monologg/kobigbird-bert-base 
-# epoch 10 - 61.6
+# epoch 3 - 0.473
+# sangrimlee/bert-base-multilingual-cased-korquad
+# epoch 3 - 0.266
+# hanmaroo/xlm_roberta_large_korquad_v2
+# klue/roberta-large
+# epoch 10 - 0.551
+# tunib/electra-ko-en-base
+
+
 @dataclass
 class ModelArguments:
     """
@@ -13,19 +18,19 @@ class ModelArguments:
     """
 
     model_name_or_path: str = field(
-        default="monologg/koelectra-base-v3-finetuned-korquad",
+        default="tunib/electra-ko-en-base",
         metadata={
             "help": "Path to pretrained model or model identifier from huggingface.co/models"
         },
     )
     config_name: Optional[str] = field(
-        default="monologg/koelectra-base-v3-finetuned-korquad",
+        default="tunib/electra-ko-en-base",
         metadata={
             "help": "Pretrained config name or path if not the same as model_name"
         },
     )
     tokenizer_name: Optional[str] = field(
-        default="monologg/koelectra-base-v3-finetuned-korquad",
+        default="tunib/electra-ko-en-base",
         metadata={
             "help": "Pretrained tokenizer name or path if not the same as model_name"
         },
@@ -99,7 +104,7 @@ class DataTrainingArguments:
         default=False, metadata={"help": "Whether to build with faiss"}
     )
     use_validation_data: bool = field(
-        default=False,
+        default=True,
         metadata={"help": "Whether to train with validation set"},
     )
 
@@ -125,13 +130,13 @@ class CustomArguments:
         },
     )
     wandb_run_name: str = field(
-        default="elastic-kobigbird",
+        default="elastic search",
         metadata={
             "help": "run name in WandB E.g. Bart_v0.1, Roberta_v0.1, DPR_Bert_v0.1"
         },
     )
     description: str = field(
-        default="Roberta-large epoch 10",
+        default="es-boolean",
         metadata={
             "help": "Explain your specific experiments settings"
         },

@@ -229,8 +229,8 @@ class SparseRetrieval(RetrievalBasic):
                           },
                           'similarity':{
                               'my_similarity':{
-                                #   'type':'BM25',
-                                  'type':'boolean',
+                                  'type':'BM25',
+                                #   'type':'boolean',
                               }
                           }
                       },
