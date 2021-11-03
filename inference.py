@@ -30,6 +30,7 @@ from transformers import (
     TrainingArguments,
     set_seed,
 )
+from Custom import MyRobertaForQuestionAnswering
 
 from utils_qa import postprocess_qa_predictions, check_no_error
 from trainer_qa import QuestionAnsweringTrainer
@@ -87,22 +88,27 @@ def main():
         else model_args.model_name_or_path,
         use_fast=True,
     )
-    model = AutoModelForQuestionAnswering.from_pretrained(
+    model = MyRobertaForQuestionAnswering.from_pretrained(
         model_args.model_name_or_path,
-        #from_tf=bool(".ckpt" in model_args.model_name_or_path),
-        #config=config,
+        config=config,
     )
+
+    # model = AutoModelForQuestionAnswering.from_pretrained(
+    #     model_args.model_name_or_path,
+    #     #from_tf=bool(".ckpt" in model_args.model_name_or_path),
+    #     #config=config,
+    # )
 
     # True일 경우 : run passage retrieval
     if data_args.eval_retrieval:
-        if data_args.kind_of_retrieval == 'Sparse':
+        if data_args.kind_of_retrieval == "Sparse":
             datasets = run_sparse_retrieval(
                 tokenizer.tokenize,
                 datasets,
                 training_args,
                 data_args,
             )
-        elif data_args.kind_of_retrieval == 'Dense':
+        elif data_args.kind_of_retrieval == "Dense":
             datasets = run_dense_retrieval(
                 datasets,
                 training_args,
@@ -125,7 +131,10 @@ def run_sparse_retrieval(
 
     # Query에 맞는 Passage들을 Retrieval 합니다.
     retriever = SparseRetrieval(
-        tokenize_fn=tokenize_fn, data_path=data_path, context_path=context_path, embedding_form="BM25"
+        tokenize_fn=tokenize_fn,
+        data_path=data_path,
+        context_path=context_path,
+        embedding_form="BM25",
     )
     retriever.get_sparse_embedding()
 
@@ -167,6 +176,7 @@ def run_sparse_retrieval(
     datasets = DatasetDict({"validation": Dataset.from_pandas(df, features=f)})
     return datasets
 
+
 def run_dense_retrieval(
     datasets: DatasetDict,
     training_args: TrainingArguments,
@@ -182,7 +192,7 @@ def run_dense_retrieval(
     p_encoder = RobertaModel.from_pretrained(data_args.dense_passage_retrieval_name).to('cuda')
     retriever = DenseRetrieval(
         tokenizers=(p_tokenizer, q_tokenizer), encoders= p_encoder, data_path=data_path, context_path=context_path
-    )
+
 
     ## 2. passage embeddings 구하기
     retriever.get_dense_passage_embedding()
@@ -261,7 +271,7 @@ def run_mrc(
             stride=data_args.doc_stride,
             return_overflowing_tokens=True,
             return_offsets_mapping=True,
-            return_token_type_ids=False, # roberta모델을 사용할 경우 False, bert를 사용할 경우 True로 표기해야합니다.
+            return_token_type_ids=False,  # roberta모델을 사용할 경우 False, bert를 사용할 경우 True로 표기해야합니다.
             padding="max_length" if data_args.pad_to_max_length else False,
         )
 
@@ -344,8 +354,8 @@ def run_mrc(
         return metric.compute(predictions=p.predictions, references=p.label_ids)
 
     print("init trainer...")
-    #print(model)
-    #exit(0)
+    # print(model)
+    # exit(0)
     # Trainer 초기화
     trainer = QuestionAnsweringTrainer(
         model=model,
