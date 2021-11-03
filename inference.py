@@ -30,6 +30,7 @@ from transformers import (
     TrainingArguments,
     set_seed,
 )
+from Custom import MyRobertaForQuestionAnswering
 
 from utils_qa import postprocess_qa_predictions, check_no_error
 from trainer_qa import QuestionAnsweringTrainer
@@ -87,22 +88,21 @@ def main():
         else model_args.model_name_or_path,
         use_fast=True,
     )
-    model = AutoModelForQuestionAnswering.from_pretrained(
+    model = MyRobertaForQuestionAnswering.from_pretrained(
         model_args.model_name_or_path,
-        #from_tf=bool(".ckpt" in model_args.model_name_or_path),
-        #config=config,
+        config=config,
     )
 
     # True일 경우 : run passage retrieval
     if data_args.eval_retrieval:
-        if data_args.kind_of_retrieval == 'Sparse':
+        if data_args.kind_of_retrieval == "Sparse":
             datasets = run_sparse_retrieval(
                 tokenizer.tokenize,
                 datasets,
                 training_args,
                 data_args,
             )
-        elif data_args.kind_of_retrieval == 'Dense':
+        elif data_args.kind_of_retrieval == "Dense":
             datasets = run_dense_retrieval(
                 tokenizer.tokenize,
                 datasets,
@@ -126,7 +126,10 @@ def run_sparse_retrieval(
 
     # Query에 맞는 Passage들을 Retrieval 합니다.
     retriever = SparseRetrieval(
-        tokenize_fn=tokenize_fn, data_path=data_path, context_path=context_path, embedding_form="BM25"
+        tokenize_fn=tokenize_fn,
+        data_path=data_path,
+        context_path=context_path,
+        embedding_form="BM25",
     )
     retriever.get_sparse_embedding()
 
@@ -168,6 +171,7 @@ def run_sparse_retrieval(
     datasets = DatasetDict({"validation": Dataset.from_pandas(df, features=f)})
     return datasets
 
+
 def run_dense_retrieval(
     tokenize_fn: Callable[[str], List[str]],
     datasets: DatasetDict,
@@ -177,7 +181,7 @@ def run_dense_retrieval(
     context_path: str = "wikipedia_documents.json",
 ) -> DatasetDict:
     ## 1. p 인코더, q 인코더 불러오기
-    
+
     ## 2. passage embeddings 구하기
 
     ## 3. 각 q embedding 구하기
@@ -190,7 +194,6 @@ def run_dense_retrieval(
     # for i in range(k):
     #     print(valid_corpus[rank[i]])
 
-
     ## 6. 결과 반환
     # if training_args.do_predict:
     #     f = Features(
@@ -199,10 +202,11 @@ def run_dense_retrieval(
     #             "id": Value(dtype="string", id=None),
     #             "question": Value(dtype="string", id=None),
     #         }
-    #     
+    #
     # datasets = DatasetDict({"validation": Dataset.from_pandas(df, features=f)})
     # return datasets
     print()
+
 
 def run_mrc(
     data_args: DataTrainingArguments,
@@ -241,7 +245,7 @@ def run_mrc(
             stride=data_args.doc_stride,
             return_overflowing_tokens=True,
             return_offsets_mapping=True,
-            return_token_type_ids=False, # roberta모델을 사용할 경우 False, bert를 사용할 경우 True로 표기해야합니다.
+            return_token_type_ids=False,  # roberta모델을 사용할 경우 False, bert를 사용할 경우 True로 표기해야합니다.
             padding="max_length" if data_args.pad_to_max_length else False,
         )
 
@@ -324,8 +328,8 @@ def run_mrc(
         return metric.compute(predictions=p.predictions, references=p.label_ids)
 
     print("init trainer...")
-    #print(model)
-    #exit(0)
+    # print(model)
+    # exit(0)
     # Trainer 초기화
     trainer = QuestionAnsweringTrainer(
         model=model,
