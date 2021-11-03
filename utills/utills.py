@@ -27,6 +27,7 @@ def config_setting(data_args: DataTrainingArguments,
     #config.retriver_model = developing ...
 
     # 훈련 관련 정보 설정 및 저장
+    training_args.load_best_model_at_end = True
     training_args.logging_strategy = "steps"
     training_args.logging_steps = 300
     training_args.fp16 = True
