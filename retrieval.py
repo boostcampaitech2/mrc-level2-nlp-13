@@ -1,6 +1,7 @@
 import os
 import json
 import time
+import datasets
 import faiss
 import pickle
 import numpy as np
@@ -9,8 +10,10 @@ import pandas as pd
 from tqdm.auto import tqdm
 from contextlib import contextmanager
 from typing import List, Tuple, NoReturn, Any, Optional, Union
+from retrieval_module.retrieval_dataset import *
 
-
+import torch
+from torch.utils.data import DataLoader
 from sklearn.feature_extraction.text import TfidfVectorizer
 from rank_bm25 import BM25Okapi
 from scipy import sparse as sp
@@ -55,6 +58,177 @@ class RetrievalBasic:
         self.p_embedding = None  
         self.indexer = None
 
+class DenseRetrieval(RetrievalBasic):
+    def __init__(self, tokenizers, encoders, data_path: Optional[str] = "./data/", context_path: Optional[str] = "wikipedia_documents.json") -> NoReturn:
+        super().__init__(None, data_path=data_path, context_path=context_path)
+        """
+        Arguments:
+            tokenize_fn:
+                기본 text를 tokenize해주는 함수입니다.
+                아래와 같은 함수들을 사용할 수 있습니다.
+                - lambda x: x.split(' ')
+                - Huggingface Tokenizer
+                - konlpy.tag의 Mecab
+
+            data_path:
+                데이터가 보관되어 있는 경로입니다.
+
+            context_path:
+                Passage들이 묶여있는 파일명입니다.
+
+            encoders:
+                passage_encoder와 question_encoder를 의미합니다. (passage_encoder, question_encoder)
+
+            data_path/context_path가 존재해야합니다.
+
+        Summary:
+            Passage 파일을 불러오고 DenseRetrieval를 이용해 임베딩 벡터를 생성하는 기능을 합니다.
+        """
+        self.p_tokenizer = tokenizers[0]
+        self.q_tokenizer = tokenizers[1]
+        self.p_encoder = encoders
+        self.passage_embedding_vectors = []
+
+    def get_dense_passage_embedding(self) -> NoReturn:
+
+        """
+        Summary:
+            Passage Embedding을 만들어 self에 저장 
+        """
+        print('Tokenize passage')
+        item = self.p_tokenizer(self.contexts, max_length=500, padding="max_length", truncation=True, return_tensors='pt')
+        p_dataset = RetrievalValidDataset(input_ids=item['input_ids'], attention_mask=item['attention_mask'])
+        p_loader = DataLoader(p_dataset, batch_size=16)
+
+        print('Make passage embedding vectors')
+        for item in tqdm(p_loader):
+            self.passage_embedding_vectors.extend(
+                    self.p_encoder(input_ids = item['input_ids'].to('cuda:0'), attention_mask=item['attention_mask'].to('cuda:0')).pooler_output.to('cpu').detach().numpy())
+            torch.cuda.empty_cache()
+            del item
+        self.passage_embedding_vectors = torch.Tensor(self.passage_embedding_vectors).squeeze()
+        print('passage embedding vectors: ', self.passage_embedding_vectors.size())
+
+    def retrieve(
+        self, q_encoder, query_or_dataset: Union[str, Dataset], topk: Optional[int] = 1
+    ) -> Union[Tuple[List, List], pd.DataFrame]:
+
+        """
+        Arguments:
+            query_or_dataset (Union[str, Dataset]):
+                str이나 Dataset으로 이루어진 Query를 받습니다.
+                str 형태인 하나의 query만 받으면 `get_relevant_doc`을 통해 유사도를 구합니다.
+                Dataset 형태는 query를 포함한 HF.Dataset을 받습니다.
+                이 경우 `get_relevant_doc_bulk`를 통해 유사도를 구합니다.
+            topk (Optional[int], optional): Defaults to 1.
+                상위 몇 개의 passage를 사용할 것인지 지정합니다.
+
+        Returns:
+            1개의 Query를 받는 경우  -> Tuple(List, List)
+            다수의 Query를 받는 경우 -> pd.DataFrame: [description]
+
+        Note:
+            다수의 Query를 받는 경우,
+                Ground Truth가 있는 Query (train/valid) -> 기존 Ground Truth Passage를 같이 반환합니다.
+                Ground Truth가 없는 Query (test) -> Retrieval한 Passage만 반환합니다.
+        """
+        assert self.passage_embedding_vectors is not None, "get_dense_passage_embedding() 메소드를 먼저 수행해줘야합니다."
+        
+    
+        if isinstance(query_or_dataset, str):
+            doc_scores, doc_indices = self.get_relevant_doc(q_encoder, query_or_dataset, k=topk)
+            print("[Search query]\n", query_or_dataset, "\n")
+
+            for i in range(topk):
+                print(f"Top-{i+1} passage with score {doc_scores[i]:4f}")
+                print(self.contexts[doc_indices[i]])
+
+            return (doc_scores, [self.contexts[doc_indices[i]] for i in range(topk)])
+
+        elif isinstance(query_or_dataset, Dataset):
+
+            # Retrieve한 Passage를 pd.DataFrame으로 반환합니다.
+            total = []
+            with timer("query exhaustive search"):
+                doc_scores, doc_indices = self.get_relevant_doc_bulk(q_encoder, 
+                    query_or_dataset["question"], k=topk
+                )
+            for idx, example in enumerate(
+                tqdm(query_or_dataset, desc="Dense retrieval: ")
+            ):
+                tmp = {
+                    # Query와 해당 id를 반환합니다.
+                    "question": example["question"],
+                    "id": example["id"],
+                    # Retrieve한 Passage의 id, context를 반환합니다.
+                    "context_id": doc_indices[idx],
+                    "context": " ".join(
+                        [self.contexts[pid] for pid in doc_indices[idx]]
+                    ),
+                }
+                if "context" in example.keys() and "answers" in example.keys():
+                    # validation 데이터를 사용하면 ground_truth context와 answer도 반환합니다.
+                    tmp["original_context"] = example["context"]
+                    tmp["answers"] = example["answers"]
+                total.append(tmp)
+
+            cqas = pd.DataFrame(total)
+            return cqas
+
+    def get_relevant_doc(self, q_encoder, query: str, k: Optional[int] = 1) -> Tuple[List, List]:
+
+        """
+        Arguments:
+            query (str):
+                하나의 Query를 받습니다.
+            k (Optional[int]): 1
+                상위 몇 개의 Passage를 반환할지 정합니다.
+        Note:
+            vocab 에 없는 이상한 단어로 query 하는 경우 assertion 발생 (예) 뙣뙇?
+        """
+        q_seqs_val = self.q_tokenizer([query], max_length=80, padding="max_length", truncation=True, return_tensors='pt').to('cuda')
+
+        print('Make top-k passage per query')
+        q_emb = q_encoder(**q_seqs_val).pooler_output.detach().cpu()  #(num_query, emb_dim)
+        dot_prod_scores = torch.matmul(q_emb, torch.transpose(self.passage_embedding_vectors, 0, 1))
+
+        rank = torch.argsort(dot_prod_scores, descending=True)
+       
+        doc_score = dot_prod_scores[rank[:k]]
+        doc_indices = rank[:k]
+
+        return doc_score, doc_indices
+
+    def get_relevant_doc_bulk(
+        self, q_encoder, queries: List, k: Optional[int] = 1
+    ) -> Tuple[List, List]:
+
+        """
+        Arguments:
+            queries (List):
+                하나의 Query를 받습니다.
+            k (Optional[int]): 1
+                상위 몇 개의 Passage를 반환할지 정합니다.
+        Note:
+            vocab 에 없는 이상한 단어로 query 하는 경우 assertion 발생 (예) 뙣뙇?
+        """
+        print('Get passage per each question')
+        q_seqs_val = self.q_tokenizer(queries, max_length=80, padding="max_length", truncation=True, return_tensors='pt').to('cuda')
+        q_dataset = RetrievalValidDataset(input_ids=q_seqs_val['input_ids'], attention_mask=q_seqs_val['attention_mask'])
+        q_loader = DataLoader(q_dataset, batch_size=1)
+        
+        doc_scores = []
+        doc_indices = []
+        for item in tqdm(q_loader):
+            q_embs = q_encoder(input_ids = item['input_ids'].to('cuda:0'), attention_mask=item['attention_mask'].to('cuda:0')).pooler_output.to('cpu')  #(num_query, emb_dim)
+            for q_emb in q_embs:
+                dot_prod_scores = torch.matmul(q_emb, torch.transpose(self.passage_embedding_vectors, 0, 1))
+                rank = torch.argsort(dot_prod_scores, dim=0, descending=True).squeeze()
+            
+                doc_scores.append(dot_prod_scores[rank[:k]].detach().cpu().numpy())
+                doc_indices.append(rank[:k].detach().cpu().numpy())
+        return doc_scores, doc_indices
+        
 class SparseRetrieval(RetrievalBasic):
     def __init__(
         self,

@@ -21,7 +21,7 @@ from datasets import (
     DatasetDict,
 )
 
-from transformers import AutoConfig, AutoModelForQuestionAnswering, AutoTokenizer
+from transformers import AutoConfig, AutoModelForQuestionAnswering, AutoTokenizer, RobertaModel
 
 from transformers import (
     DataCollatorWithPadding,
@@ -34,7 +34,7 @@ from Custom import MyRobertaForQuestionAnswering
 
 from utils_qa import postprocess_qa_predictions, check_no_error
 from trainer_qa import QuestionAnsweringTrainer
-from retrieval import SparseRetrieval
+from retrieval import DenseRetrieval, SparseRetrieval
 
 from arguments import (
     ModelArguments,
@@ -110,7 +110,6 @@ def main():
             )
         elif data_args.kind_of_retrieval == "Dense":
             datasets = run_dense_retrieval(
-                tokenizer.tokenize,
                 datasets,
                 training_args,
                 data_args,
@@ -126,7 +125,7 @@ def run_sparse_retrieval(
     datasets: DatasetDict,
     training_args: TrainingArguments,
     data_args: DataTrainingArguments,
-    data_path: str = "../data",
+    data_path: str = "./data",
     context_path: str = "wikipedia_documents.json",
 ) -> DatasetDict:
 
@@ -179,7 +178,6 @@ def run_sparse_retrieval(
 
 
 def run_dense_retrieval(
-    tokenize_fn: Callable[[str], List[str]],
     datasets: DatasetDict,
     training_args: TrainingArguments,
     data_args: DataTrainingArguments,
@@ -187,32 +185,54 @@ def run_dense_retrieval(
     context_path: str = "wikipedia_documents.json",
 ) -> DatasetDict:
     ## 1. p 인코더, q 인코더 불러오기
+        # Query에 맞는 Passage들을 Retrieval 합니다.
+    p_tokenizer = AutoTokenizer.from_pretrained('klue/roberta-small')
+    q_tokenizer = AutoTokenizer.from_pretrained('klue/roberta-small')
+    
+    p_encoder = RobertaModel.from_pretrained(data_args.dense_passage_retrieval_name).to('cuda')
+    retriever = DenseRetrieval(
+        tokenizers=(p_tokenizer, q_tokenizer), encoders= p_encoder, data_path=data_path, context_path=context_path
+
 
     ## 2. passage embeddings 구하기
+    retriever.get_dense_passage_embedding()
+    
+    del p_encoder # 메모리 확보
+    
+    q_encoder = RobertaModel.from_pretrained(data_args.dense_question_retrieval_name).to('cuda')
+    ## 3. 각 쿼리 임베딩에 따른 passage 구하기
+    df = retriever.retrieve(q_encoder, datasets["validation"], topk=data_args.top_k_retrieval)
 
-    ## 3. 각 q embedding 구하기
+    ## 4. 반환하기
+    # test data 에 대해선 정답이 없으므로 id question context 로만 데이터셋이 구성됩니다.
+    if training_args.do_predict:
+        f = Features(
+            {
+                "context": Value(dtype="string", id=None),
+                "id": Value(dtype="string", id=None),
+                "question": Value(dtype="string", id=None),
+            }
+        )
 
-    ## 4. 유사도 구하기
-    # dot_prod_scores = torch.matmul(q_emb, torch.transpose(p_embs, 0, 1))
-
-    ## 5. top - k 구하기
-    # rank = torch.argsort(dot_prod_scores, dim=1, descending=True).squeeze()
-    # for i in range(k):
-    #     print(valid_corpus[rank[i]])
-
-    ## 6. 결과 반환
-    # if training_args.do_predict:
-    #     f = Features(
-    #         {
-    #             "context": Value(dtype="string", id=None),
-    #             "id": Value(dtype="string", id=None),
-    #             "question": Value(dtype="string", id=None),
-    #         }
-    #
-    # datasets = DatasetDict({"validation": Dataset.from_pandas(df, features=f)})
-    # return datasets
-    print()
-
+    # train data 에 대해선 정답이 존재하므로 id question context answer 로 데이터셋이 구성됩니다.
+    elif training_args.do_eval:
+        f = Features(
+            {
+                "answers": Sequence(
+                    feature={
+                        "text": Value(dtype="string", id=None),
+                        "answer_start": Value(dtype="int32", id=None),
+                    },
+                    length=-1,
+                    id=None,
+                ),
+                "context": Value(dtype="string", id=None),
+                "id": Value(dtype="string", id=None),
+                "question": Value(dtype="string", id=None),
+            }
+        )
+    datasets = DatasetDict({"validation": Dataset.from_pandas(df, features=f)})
+    return datasets
 
 def run_mrc(
     data_args: DataTrainingArguments,
@@ -352,6 +372,7 @@ def run_mrc(
     logger.info("*** Evaluate ***")
 
     #### eval dataset & eval example - predictions.json 생성됨
+    training_args.per_device_eval_batch_size = 16
     if training_args.do_predict:
         predictions = trainer.predict(
             test_dataset=eval_dataset, test_examples=datasets["validation"]

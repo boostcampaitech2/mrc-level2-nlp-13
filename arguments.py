@@ -21,12 +21,11 @@ class ModelArguments:
         },
     )
     tokenizer_name: Optional[str] = field(
-        default="klue/roberta-large",
+        default="monologg/koelectra-base-v3-discriminator",
         metadata={
             "help": "Pretrained tokenizer name or path if not the same as model_name"
         },
     )
-
 
 @dataclass
 class DataTrainingArguments:
@@ -35,7 +34,7 @@ class DataTrainingArguments:
     """
 
     dataset_name: Optional[str] = field(
-        default="../data/train_dataset",
+        default="./data/train_dataset",
         metadata={"help": "The name of the dataset to use."},
     )
     overwrite_cache: bool = field(
@@ -47,7 +46,7 @@ class DataTrainingArguments:
         metadata={"help": "The number of processes to use for the preprocessing."},
     )
     max_seq_length: int = field(
-        default=384,
+        default=450,
         metadata={
             "help": "The maximum total input sequence length after tokenization. Sequences longer "
             "than this will be truncated, sequences shorter will be padded."
@@ -99,7 +98,57 @@ class DataTrainingArguments:
         metadata={"help": "Whether to train with validation set"},
     )
 
+    # For Dense retrieval
+    dense_base_model: str = field(
+        default="klue/roberta-small",
+        metadata={
+            "help": "Path to pretrained model or model identifier from huggingface.co/models"
+        },
+    )
+    dense_passage_retrieval_name: str = field(
+        default="./models_result/roberta_small_dense_retireval_v3/27ep/p_encoder",
+        metadata={
+            "help": "Path to pretrained model"
+        },
 
+    )
+    dense_question_retrieval_name: str = field(
+        default="./models_result/roberta_small_dense_retireval_v3/27ep/q_encoder",
+        metadata={
+            "help": "Path to pretrained model"
+        },
+    )
+    dense_train_epoch: int = field(
+        default=30,
+        metadata={
+            "help": "Epochs"
+        },
+    )
+    dense_train_batch_size: int = field(
+        default=8,
+        metadata={
+            "help": "batch size for train DataLoader"
+        },
+    )
+    dense_train_learning_rate: float = field(
+        default=2e-5,
+        metadata={
+            "help": "learning_rate for training"
+        },
+    )
+    dense_max_length: int = field(
+        default=500,
+        metadata={
+            "help": "batch size for train DataLoader"
+        },
+    )
+    dense_train_output_dir: str = field(
+        default="./models_result/roberta_small_dense_retireval_v3/",
+        metadata={
+            "help": "save directory"
+        },
+    )
+    
 @dataclass
 class CustomArguments:
     """
