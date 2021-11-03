@@ -88,16 +88,18 @@ def main():
         else model_args.model_name_or_path,
         use_fast=True,
     )
-    model = MyRobertaForQuestionAnswering.from_pretrained(
-        model_args.model_name_or_path,
-        config=config,
-    )
 
-    # model = AutoModelForQuestionAnswering.from_pretrained(
+    # model = MyRobertaForQuestionAnswering.from_pretrained(
     #     model_args.model_name_or_path,
     #     #from_tf=bool(".ckpt" in model_args.model_name_or_path),
-    #     #config=config,
+    #     config=config,
     # )
+
+    model = AutoModelForQuestionAnswering.from_pretrained(
+        model_args.model_name_or_path,
+        #from_tf=bool(".ckpt" in model_args.model_name_or_path),
+        #config=config,
+    )
 
     # True일 경우 : run passage retrieval
     if data_args.eval_retrieval:
@@ -192,8 +194,7 @@ def run_dense_retrieval(
     p_encoder = RobertaModel.from_pretrained(data_args.dense_passage_retrieval_name).to('cuda')
     retriever = DenseRetrieval(
         tokenizers=(p_tokenizer, q_tokenizer), encoders= p_encoder, data_path=data_path, context_path=context_path
-
-
+    )
     ## 2. passage embeddings 구하기
     retriever.get_dense_passage_embedding()
     

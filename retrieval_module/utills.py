@@ -6,17 +6,38 @@ import torch
 from torch.utils.data import DataLoader, ConcatDataset
 from datasets import load_from_disk
 
+from torch.utils.data import Dataset
 from retrieval_module.retrieval_dataset import RetrievalTrainDataset, RetrievalValidDataset
 from torch.utils.data import (DataLoader, RandomSampler, TensorDataset)
 
 def prepare_train_features_for_retriever(
-    examples, 
+    examples: Dataset, 
     tokenizer, 
-    question_column_name : str,
-    context_column_name : str,
-    answer_column_name : str,
-    max_seq_length : int
+    question_column_name: str,
+    context_column_name: str,
+    answer_column_name: str,
+    max_seq_length: int
     ):
+    '''
+        Arguments:
+            examples Dataset:
+                torch.utill.Dataset으로 이루어진 Context, Questions, Answer를 받습니다.
+            tokenizer 
+                context를 tokenizing 하기 위한 tokenizer
+            question_column_name:
+                Dataset에서 Question을 닮고 있는 변수 이름 'question'
+            context_column_name:
+                Dataset에서 Context 닮고 있는 변수 이름 'context'
+            answer_column_name:
+                Dataset에서 Answer를 닮고 있는 변수 이름 'answer'
+            max_seq_length:
+                context를 tokenizing할 때, 사용할 최대 길이
+        Returns:
+            Dict -> ['input_ids', 'attention_mask', 'label', ...]
+
+        Note:
+            context를 받아 토크나이징 하고, 정답이 있는 strid인지 아닌지 
+    '''
     pad_on_right = tokenizer.padding_side == "right"
     # truncation과 padding(length가 짧을때만)을 통해 toknization을 진행하며, stride를 이용하여 overflow를 유지합니다.
     # 각 example들은 이전의 context와 조금씩 겹치게됩니다.
@@ -79,67 +100,23 @@ def prepare_train_features_for_retriever(
                 tokenized_examples["labels"].append(0)
     return tokenized_examples
 
-def sample_nagative(train_dataset, length, q_seqs, num_negative):
-    questions = []
-    positive_with_negative_context = []
-    attention_mask = []
-    search_idx = 0
-    for idx in tqdm(range(length)):
-        tokenized_idx = train_dataset['sample_mapping'][search_idx]
-        questions.append(q_seqs['input_ids'][idx])
-        count = 0
-        positive_intput_temp = []
-        positive_attention_temp = []
-        negative_intput_temp = []
-        negative_attention_temp = []
-        flag = False
-        while tokenized_idx == idx:
-            if train_dataset['labels'][search_idx] == 0 and flag == False:
-                positive_intput_temp.append(train_dataset['input_ids'][search_idx])
-                positive_attention_temp.append(train_dataset['attention_mask'][search_idx])
-                count += 1
-                flag = True
-            elif train_dataset['labels'][search_idx]== 1:
-                negative_intput_temp.append(train_dataset['input_ids'][search_idx])
-                negative_attention_temp.append(train_dataset['attention_mask'][search_idx])
-                count += 1
-            search_idx+=1
-            if search_idx >= len(train_dataset['input_ids']): break
-            tokenized_idx = train_dataset['sample_mapping'][search_idx]
-            if count >= num_negative:
-                break
-        
-        positive_with_negative_context.extend(positive_intput_temp)
-        attention_mask.extend(positive_attention_temp)
-        positive_with_negative_context.extend(negative_intput_temp)
-        attention_mask.extend(negative_attention_temp)
-        
-        if count < num_negative:
-            for _ in range(num_negative - count):
-                plus_negative_idx = np.random.randint(0, length)
-                while plus_negative_idx in np.arange(search_idx-count, search_idx):
-                    plus_negative_idx = np.random.randint(0, length)
-                positive_with_negative_context.append(train_dataset['input_ids'][plus_negative_idx])
-                attention_mask.append(train_dataset['attention_mask'][plus_negative_idx])
+def prepare_data(tokenizer, 
+            batch_size: int, 
+            dense_max_length: int):
+    '''
+        Arguments:
+            tokenizer 
+                context 및 qustion를 tokenizing 하기 위한 tokenizer
+            dense_max_length:
+                context를 tokenizing할 때, 사용할 최대 길이
+            batch_size:
+                retrieval를 학습할 때, 사용할 batch size
+        Returns:
+            DataLoader(), List[List[str]], List[List[str]]
 
-    return positive_with_negative_context, attention_mask
-
-def get_ground_truth(valid_dataset, length):
-    ground_truth = []
-    search_idx = 0
-    t_idx = valid_dataset['sample_mapping'][search_idx]
-    for idx in range(length):
-        flag = False
-        while t_idx == idx:
-            if valid_dataset['labels'][search_idx] == 0 and flag == False:
-                ground_truth.append(search_idx)
-                flag = True
-            search_idx += 1
-            if search_idx >= len(valid_dataset['labels']): break
-            t_idx = valid_dataset['sample_mapping'][search_idx]
-    return ground_truth
-
-def prepare_data(tokenizer, batch_size, dense_max_length):
+        Note:
+            데이터를 로드하고, 토크나이징해 학습에 사용하기 위한 dataloader, list로 반환합니다.
+    '''
     datasets = load_from_disk('/opt/ml/git/mrc-level2-nlp-13/data/train_dataset/')
     wiki_datasets = load_from_disk('/opt/ml/git/mrc-level2-nlp-13/data/wiki')
     
@@ -148,8 +125,6 @@ def prepare_data(tokenizer, batch_size, dense_max_length):
 
     train_dataset = datasets["train"]
     valid_dataset = datasets["validation"]
-
-    #train_dataset = ConcatDataset([train_dataset, wiki_datasets])
 
     #q_seqs = tokenizer(train_dataset['question'], max_length=80, padding="max_length", truncation=True, return_tensors='pt')
     q_seqs = tokenizer(list(np.concatenate([datasets['train']['question'], wiki_datasets['question']], axis=0)), max_length=80, padding="max_length", truncation=True, return_tensors='pt')

@@ -9,19 +9,19 @@ class ModelArguments:
     """
 
     model_name_or_path: str = field(
-        default="klue/roberta-large",
+        default="hyunwoongko/kobart",
         metadata={
             "help": "Path to pretrained model or model identifier from huggingface.co/models"
         },
     )
     config_name: Optional[str] = field(
-        default="klue/roberta-large",
+        default="hyunwoongko/kobart",
         metadata={
             "help": "Pretrained config name or path if not the same as model_name"
         },
     )
     tokenizer_name: Optional[str] = field(
-        default="monologg/koelectra-base-v3-discriminator",
+        default="hyunwoongko/kobart",
         metadata={
             "help": "Pretrained tokenizer name or path if not the same as model_name"
         },
@@ -46,7 +46,7 @@ class DataTrainingArguments:
         metadata={"help": "The number of processes to use for the preprocessing."},
     )
     max_seq_length: int = field(
-        default=450,
+        default=384,
         metadata={
             "help": "The maximum total input sequence length after tokenization. Sequences longer "
             "than this will be truncated, sequences shorter will be padded."
@@ -78,7 +78,7 @@ class DataTrainingArguments:
         metadata={"help": "Whether to run passage retrieval using sparse embedding."},
     )
     kind_of_retrieval: str = field(
-        default="Sparse",  # SparseDense
+        default="Dense",  # SparseDense
         metadata={"help": "Kind of retrieval."},
     )
     num_clusters: int = field(
@@ -100,7 +100,7 @@ class DataTrainingArguments:
 
     # For Dense retrieval
     dense_base_model: str = field(
-        default="klue/roberta-small",
+        default="klue/roberta-base",
         metadata={
             "help": "Path to pretrained model or model identifier from huggingface.co/models"
         },
@@ -119,7 +119,7 @@ class DataTrainingArguments:
         },
     )
     dense_train_epoch: int = field(
-        default=30,
+        default=10,
         metadata={
             "help": "Epochs"
         },
@@ -137,13 +137,13 @@ class DataTrainingArguments:
         },
     )
     dense_max_length: int = field(
-        default=500,
+        default=512,
         metadata={
             "help": "batch size for train DataLoader"
         },
     )
     dense_train_output_dir: str = field(
-        default="./models_result/roberta_small_dense_retireval_v3/",
+        default="./models_result/roberta_small_dense_retireval_v4/",
         metadata={
             "help": "save directory"
         },
@@ -162,17 +162,17 @@ class CustomArguments:
         metadata={"help": "Your entity name in WandB E.g. clue or KyunghyunLim, ..."},
     )
     project_name: str = field(
-        default="mrc_test",
+        default="mrc_test_retrieval",
         metadata={"help": "Your project name in WandB E.g. LKH, Readers, ..."},
     )
     wandb_run_name: str = field(
-        default="Roberta-large_v0.5",
+        default="Dense-roberta-base_v0.1",
         metadata={
             "help": "run name in WandB E.g. Bart_v0.1, Roberta_v0.1, DPR_Bert_v0.1"
         },
     )
     description: str = field(
-        default="Roberta-large epoch 10 + cnn head",
+        default="Dense max_length=512",
         metadata={"help": "Explain your specific experiments settings"},
     )
 

@@ -8,6 +8,9 @@ from transformers import HfArgumentParser, TrainingArguments
 
 import torch
 import torch.nn.functional as F
+from torch.cuda import amp
+from torch.cuda.amp import autocast, GradScaler
+from torch.utils.data import DataLoader
 
 from arguments import (
     DataTrainingArguments,
@@ -18,7 +21,35 @@ from tqdm import trange, tqdm
 from utills.utills import config_setting_for_dense_retrieval
 import wandb
 
-def train(tokenizer, q_encoder, p_encoder, optimizer, scheduler, train_dataloader, valid_context, valid_question, data_args):
+def train(tokenizer: AutoTokenizer, 
+        q_encoder: RobertaModel, 
+        p_encoder: RobertaModel, 
+        optimizer: torch.optim, 
+        scheduler: torch.optim.lr_scheduler, 
+        train_dataloader: DataLoader, 
+        valid_context: List[List[str]], 
+        valid_question: List[List[str]], 
+        data_args: DataTrainingArguments):
+    '''
+        Arguments:
+            tokenizer 
+                validation context 및 qustion를 tokenizing 하기 위한 tokenizer
+            q_encoder, p_encoder:
+                question 및 passage를 인코딩하는 모델
+            optimizer, scheduler:
+                학습을 위한 optimizer와 learning rate 조절을 위한 scheduler
+            train_dataloader:
+                학습 데이터를 배치사이즈 만큼씩 꺼내주는 DataLoader
+            valid_context, valid_question:
+                검증을 위한 context 및 question list
+            data_args:
+                학습을 제어하기 위한 파라미터
+        Returns:
+            None
+
+        Note:
+            Dense retrieval 학습을 진행하고, top1~top100 acc를 로깅
+    '''
     print('Start train!!')
     device = 'cuda:0' if torch.cuda.is_available() else 'cpu'
   
@@ -34,7 +65,7 @@ def train(tokenizer, q_encoder, p_encoder, optimizer, scheduler, train_dataloade
     for epoch in train_iterator:    
         epoch_iterator = tqdm(train_dataloader, desc="Iteration")    
         # Train
-        train_loss = train_per_epoch(q_encoder, p_encoder, optimizer, epoch_iterator, data_args)
+        train_loss = train_per_epoch(q_encoder, p_encoder, optimizer, epoch_iterator)
         
         # Valid
         top_1_acc, top_3_acc, top_10_acc, top_35_acc, top_100_acc = valid_per_epoch(tokenizer, p_encoder, q_encoder, valid_context, valid_question, data_args)
@@ -86,49 +117,90 @@ def train(tokenizer, q_encoder, p_encoder, optimizer, scheduler, train_dataloade
             p_encoder.save_pretrained(f'{data_args.dense_train_output_dir}/best/p_encoder')
             print('best top-35 saved!')
 
-def train_per_epoch(q_encoder, p_encoder, optimizer, epoch_iterator, data_args):
+def train_per_epoch(
+        q_encoder: RobertaModel, 
+        p_encoder: RobertaModel, 
+        optimizer: torch.optim, 
+        epoch_iterator: DataLoader):
+    '''
+        Arguments:
+            q_encoder, p_encoder:
+                question 및 passage를 인코딩하는 모델
+            optimizer:
+                학습을 위한 optimizer와 learning rate 조절을 위한 scheduler
+            epoch_iterator:
+                학습 데이터를 배치사이즈 만큼씩 꺼내주는 DataLoader
+        Returns:
+            torch.float32 (Loss)
+
+        Note:
+            1 epoch 학습을 진행한 후 학습 loss 반환
+    '''
     batch_loss = 0
     for step, batch in enumerate(epoch_iterator):
-      q_encoder.train()
-      p_encoder.train()
-      
-      if torch.cuda.is_available():
-        batch = tuple(t.cuda() for t in batch)
+        q_encoder.train()
+        p_encoder.train()
+        
+        if torch.cuda.is_available():
+            batch = tuple(t.cuda() for t in batch)
 
-      p_inputs = {'input_ids': batch[0],
-                  'attention_mask': batch[1],
-                  'token_type_ids': batch[2]
-                  }
-      
-      q_inputs = {'input_ids': batch[3],
-                  'attention_mask': batch[4],
-                  'token_type_ids': batch[5]}
-      
-      p_outputs = p_encoder(**p_inputs).pooler_output  # (batch_size, emb_dim)
-      q_outputs = q_encoder(**q_inputs).pooler_output  # (batch_size, emb_dim)
+        p_inputs = {'input_ids': batch[0],
+                    'attention_mask': batch[1],
+                    'token_type_ids': batch[2]
+                    }
+        
+        q_inputs = {'input_ids': batch[3],
+                    'attention_mask': batch[4],
+                    'token_type_ids': batch[5]}
+        
+        p_outputs = p_encoder(**p_inputs).pooler_output  # (batch_size, emb_dim)
+        q_outputs = q_encoder(**q_inputs).pooler_output  # (batch_size, emb_dim)
 
-      # Calculate similarity score & loss
-      sim_scores = torch.matmul(q_outputs, torch.transpose(p_outputs, 0, 1))  # (batch_size, emb_dim) x (emb_dim, batch_size) = (batch_size, batch_size)
+        # Calculate similarity score & loss
+        sim_scores = torch.matmul(q_outputs, torch.transpose(p_outputs, 0, 1))  # (batch_size, emb_dim) x (emb_dim, batch_size) = (batch_size, batch_size)
 
-      # target: position of positive samples = diagonal element 
-      targets = torch.arange(0, len(batch[0])).long()
-      if torch.cuda.is_available():
-        targets = targets.to('cuda')
+        # target: position of positive samples = diagonal element 
+        targets = torch.arange(0, len(batch[0])).long()
+        if torch.cuda.is_available():
+            targets = targets.to('cuda')
 
-      sim_scores = F.log_softmax(sim_scores, dim=1)
+        sim_scores = F.log_softmax(sim_scores, dim=1)
 
-      loss = F.nll_loss(sim_scores, targets)
+        loss = F.nll_loss(sim_scores, targets)
 
-      loss.backward()
-      optimizer.step()
-      q_encoder.zero_grad()
-      p_encoder.zero_grad()
+        loss.backward()
+        optimizer.step()
+        q_encoder.zero_grad()
+        p_encoder.zero_grad()
 
-      batch_loss += loss.detach().cpu().numpy()
-      torch.cuda.empty_cache()
+        batch_loss += loss.detach().cpu().numpy()
+    torch.cuda.empty_cache()
     return batch_loss / len(epoch_iterator)
 
-def valid_per_epoch(tokenizer, p_encoder, q_encoder, valid_context, valid_question, data_args):
+def valid_per_epoch(
+    tokenizer, 
+    p_encoder: RobertaModel, 
+    q_encoder: RobertaModel, 
+    valid_context: List[List[str]], 
+    valid_question: List[List[str]], 
+    data_args: DataTrainingArguments
+    ):
+    '''
+        Arguments:
+            tokenizer 
+                validation context 및 qustion를 tokenizing 하기 위한 tokenizer
+            q_encoder, p_encoder:
+                question 및 passage를 인코딩하는 모델
+            valid_context, valid_question:
+                검증을 위한 context 및 question list
+            data_args:
+                학습을 제어하기 위한 파라미터
+        Returns:
+            float, float, float, float, float
+
+        Note:
+            validation을 진행한 후 top-k acc 들을 반환
+    '''
     print(f'Valid start!')
     with torch.no_grad():
         p_encoder.eval()
@@ -182,10 +254,10 @@ def main():
         config = config_setting_for_dense_retrieval(data_args, cus_args)
         wandb.init(project=cus_args.project_name, entity=cus_args.entity_name, name=cus_args.wandb_run_name, config=config)
 
-
     # tokenizer 준비
     print('Loading tokenizer')
     tokenizer = AutoTokenizer.from_pretrained(data_args.dense_base_model)
+    print(tokenizer)
 
     # 학습 및 검증 데이터 준비
     print('Loading data')
@@ -195,7 +267,7 @@ def main():
     print('Loading models')
     p_encoder = RobertaModel.from_pretrained(data_args.dense_base_model)
     q_encoder = RobertaModel.from_pretrained(data_args.dense_base_model)
-    
+
     if torch.cuda.is_available():
         p_encoder.cuda()
         q_encoder.cuda()
@@ -208,7 +280,7 @@ def main():
         {'params': [p for n, p in q_encoder.named_parameters() if any(nd in n for nd in no_decay)], 'weight_decay': 0.0}
         ]
     optimizer = AdamW(optimizer_grouped_parameters, lr=data_args.dense_train_learning_rate, eps=1e-08, weight_decay=0.01)
-    t_total = len(train_dataloader) // 1 * 50 #(gradient_accumulation_steps, epoch)
+    t_total = len(train_dataloader) // 1 * data_args.dense_train_epoch #(gradient_accumulation_steps, epoch)
     scheduler = get_linear_schedule_with_warmup(optimizer, num_warmup_steps=100, num_training_steps=t_total)
     
     if cus_args.use_wandb:
