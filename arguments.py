@@ -15,18 +15,17 @@ class ModelArguments:
         },
     )
     config_name: Optional[str] = field(
-        default="klue/bert-base",
+        default="monologg/koelectra-base-v3-discriminator",
         metadata={
             "help": "Pretrained config name or path if not the same as model_name"
         },
     )
     tokenizer_name: Optional[str] = field(
-        default="klue/bert-base",
+        default="monologg/koelectra-base-v3-discriminator",
         metadata={
             "help": "Pretrained tokenizer name or path if not the same as model_name"
         },
     )
-
 
 @dataclass
 class DataTrainingArguments:
@@ -35,7 +34,7 @@ class DataTrainingArguments:
     """
 
     dataset_name: Optional[str] = field(
-        default="../data/train_dataset",
+        default="./data/train_dataset",
         metadata={"help": "The name of the dataset to use."},
     )
     overwrite_cache: bool = field(
@@ -47,7 +46,7 @@ class DataTrainingArguments:
         metadata={"help": "The number of processes to use for the preprocessing."},
     )
     max_seq_length: int = field(
-        default=384,
+        default=450,
         metadata={
             "help": "The maximum total input sequence length after tokenization. Sequences longer "
             "than this will be truncated, sequences shorter will be padded."
@@ -79,14 +78,14 @@ class DataTrainingArguments:
         metadata={"help": "Whether to run passage retrieval using sparse embedding."},
     )
     kind_of_retrieval: str = field(
-        default='Sparse', #SparseDense
+        default='Dense', #SparseDense
         metadata={"help": "Kind of retrieval."},
     )
     num_clusters: int = field(
         default=128, metadata={"help": "Define how many clusters to use for faiss."}
     )
     top_k_retrieval: int = field(
-        default=30,
+        default=100,
         metadata={
             "help": "Define how many top-k passages to retrieve based on similarity."
         },
@@ -95,9 +94,62 @@ class DataTrainingArguments:
         default=False, metadata={"help": "Whether to build with faiss"}
     )
     use_validation_data: bool = field(
-        default=False,
+        default=True,
         metadata={"help": "Whether to train with validation set"},
     )
+
+    # For Dense retrieval
+    dense_base_model: str = field(
+        default="klue/roberta-small",
+        metadata={
+            "help": "Path to pretrained model or model identifier from huggingface.co/models"
+        },
+    )
+    dense_passage_retrieval_name: str = field(
+        default="./models_result/roberta_small_dense_retireval_v3/27ep/p_encoder",
+        metadata={
+            "help": "Path to pretrained model"
+        },
+
+    )
+    dense_question_retrieval_name: str = field(
+        default="./models_result/roberta_small_dense_retireval_v3/27ep/q_encoder",
+        metadata={
+            "help": "Path to pretrained model"
+        },
+    )
+    dense_train_epoch: int = field(
+        default=30,
+        metadata={
+            "help": "Epochs"
+        },
+    )
+    dense_train_batch_size: int = field(
+        default=8,
+        metadata={
+            "help": "batch size for train DataLoader"
+        },
+    )
+    dense_train_learning_rate: float = field(
+        default=2e-5,
+        metadata={
+            "help": "learning_rate for training"
+        },
+    )
+    dense_max_length: int = field(
+        default=500,
+        metadata={
+            "help": "batch size for train DataLoader"
+        },
+    )
+    dense_train_output_dir: str = field(
+        default="./models_result/roberta_small_dense_retireval_v3/",
+        metadata={
+            "help": "save directory"
+        },
+    )
+    
+    
 
 @dataclass
 class CustomArguments:
@@ -115,13 +167,13 @@ class CustomArguments:
         },
     )
     project_name: str = field(
-        default="mrc_test",
+        default="mrc_test_retrieval",
         metadata={
             "help": "Your project name in WandB E.g. LKH, Readers, ..."
         },
     )
     wandb_run_name: str = field(
-        default="Roberta-large_v0.1",
+        default="Dense-roberta-small_v0.2",
         metadata={
             "help": "run name in WandB E.g. Bart_v0.1, Roberta_v0.1, DPR_Bert_v0.1"
         },

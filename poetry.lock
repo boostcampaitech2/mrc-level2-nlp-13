@@ -55,7 +55,7 @@ tests = ["coverage[toml] (>=5.0.2)", "hypothesis", "pytest"]
 
 [[package]]
 name = "async-timeout"
-version = "4.0.0a3"
+version = "4.0.0"
 description = "Timeout context manager for asyncio programs"
 category = "main"
 optional = false
@@ -1811,8 +1811,8 @@ argon2-cffi = [
     {file = "argon2_cffi-21.1.0-pp37-pypy37_pp73-win_amd64.whl", hash = "sha256:566ffb581bbd9db5562327aee71b2eda24a1c15b23a356740abe3c011bbe0dcb"},
 ]
 async-timeout = [
-    {file = "async-timeout-4.0.0a3.tar.gz", hash = "sha256:e6edc264ebcc8d3d06d16d687aff0ebf686f3cecf9a2d5f127629ea2044111b9"},
-    {file = "async_timeout-4.0.0a3-py3-none-any.whl", hash = "sha256:b57eb8bc4e9693d4be1c97d93ccf8225908903dcc6440e1f8bf0b785c1ac2478"},
+    {file = "async-timeout-4.0.0.tar.gz", hash = "sha256:7d87a4e8adba8ededb52e579ce6bc8276985888913620c935094c2276fd83382"},
+    {file = "async_timeout-4.0.0-py3-none-any.whl", hash = "sha256:f3303dddf6cafa748a92747ab6c2ecf60e0aeca769aee4c151adfce243a05d9b"},
 ]
 attrs = [
     {file = "attrs-21.2.0-py2.py3-none-any.whl", hash = "sha256:149e90d6d8ac20db7a955ad60cf0e6881a3f20d37096140088356da6c716b0b1"},
