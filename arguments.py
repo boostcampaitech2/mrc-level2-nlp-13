@@ -1,6 +1,7 @@
 from dataclasses import asdict, dataclass, field
 from typing import Any, Dict, List, Optional
 
+
 # monologg/koelectra-base-v3-finetuned-korquad 
 # epoch 3 - 0.473
 # sangrimlee/bert-base-multilingual-cased-korquad
@@ -18,24 +19,23 @@ class ModelArguments:
     """
 
     model_name_or_path: str = field(
-        default="tunib/electra-ko-en-base",
+        default="klue/roberta-large",
         metadata={
             "help": "Path to pretrained model or model identifier from huggingface.co/models"
         },
     )
     config_name: Optional[str] = field(
-        default="tunib/electra-ko-en-base",
+        default="klue/roberta-large",
         metadata={
             "help": "Pretrained config name or path if not the same as model_name"
         },
     )
     tokenizer_name: Optional[str] = field(
-        default="tunib/electra-ko-en-base",
+        default="monologg/koelectra-base-v3-discriminator",
         metadata={
             "help": "Pretrained tokenizer name or path if not the same as model_name"
         },
     )
-
 
 @dataclass
 class DataTrainingArguments:
@@ -44,7 +44,7 @@ class DataTrainingArguments:
     """
 
     dataset_name: Optional[str] = field(
-        default="../data/train_dataset",
+        default="./data/train_dataset",
         metadata={"help": "The name of the dataset to use."},
     )
     overwrite_cache: bool = field(
@@ -56,7 +56,7 @@ class DataTrainingArguments:
         metadata={"help": "The number of processes to use for the preprocessing."},
     )
     max_seq_length: int = field(
-        default=384,
+        default=450,
         metadata={
             "help": "The maximum total input sequence length after tokenization. Sequences longer "
             "than this will be truncated, sequences shorter will be padded."
@@ -88,7 +88,7 @@ class DataTrainingArguments:
         metadata={"help": "Whether to run passage retrieval using sparse embedding."},
     )
     kind_of_retrieval: str = field(
-        default='Sparse', #SparseDense
+        default="Sparse",  # SparseDense
         metadata={"help": "Kind of retrieval."},
     )
     num_clusters: int = field(
@@ -108,101 +108,131 @@ class DataTrainingArguments:
         metadata={"help": "Whether to train with validation set"},
     )
 
+    # For Dense retrieval
+    dense_base_model: str = field(
+        default="klue/roberta-small",
+        metadata={
+            "help": "Path to pretrained model or model identifier from huggingface.co/models"
+        },
+    )
+    dense_passage_retrieval_name: str = field(
+        default="./models_result/roberta_small_dense_retireval_v3/27ep/p_encoder",
+        metadata={
+            "help": "Path to pretrained model"
+        },
+
+    )
+    dense_question_retrieval_name: str = field(
+        default="./models_result/roberta_small_dense_retireval_v3/27ep/q_encoder",
+        metadata={
+            "help": "Path to pretrained model"
+        },
+    )
+    dense_train_epoch: int = field(
+        default=30,
+        metadata={
+            "help": "Epochs"
+        },
+    )
+    dense_train_batch_size: int = field(
+        default=8,
+        metadata={
+            "help": "batch size for train DataLoader"
+        },
+    )
+    dense_train_learning_rate: float = field(
+        default=2e-5,
+        metadata={
+            "help": "learning_rate for training"
+        },
+    )
+    dense_max_length: int = field(
+        default=500,
+        metadata={
+            "help": "batch size for train DataLoader"
+        },
+    )
+    dense_train_output_dir: str = field(
+        default="./models_result/roberta_small_dense_retireval_v3/",
+        metadata={
+            "help": "save directory"
+        },
+    )
+    
 @dataclass
 class CustomArguments:
     """
     Arguments wandb and custom settings for training
     """
+
     # wandb
-    use_wandb: bool = field(
-        default=True, metadata={"help": "Whether to use Wandb"}
-    )
+    use_wandb: bool = field(default=True, metadata={"help": "Whether to use Wandb"})
     entity_name: str = field(
         default="clue",
-        metadata={
-            "help": "Your entity name in WandB E.g. clue or KyunghyunLim, ..."
-        },
+        metadata={"help": "Your entity name in WandB E.g. clue or KyunghyunLim, ..."},
     )
     project_name: str = field(
         default="mrc_test",
-        metadata={
-            "help": "Your project name in WandB E.g. LKH, Readers, ..."
-        },
+        metadata={"help": "Your project name in WandB E.g. LKH, Readers, ..."},
     )
     wandb_run_name: str = field(
-        default="elastic search",
+        default="Roberta-large_v0.5",
         metadata={
             "help": "run name in WandB E.g. Bart_v0.1, Roberta_v0.1, DPR_Bert_v0.1"
         },
     )
     description: str = field(
-        default="es-boolean",
-        metadata={
-            "help": "Explain your specific experiments settings"
-        },
+        default="Roberta-large epoch 10 + cnn head",
+        metadata={"help": "Explain your specific experiments settings"},
     )
 
     # Training
     epochs: int = field(
-        default = 10,
-        metadata={
-            "help": "Training epoch"
-        },
+        default=10,
+        metadata={"help": "Training epoch"},
     )
     custom_learning_rate: float = field(
-        default = 5e-5,
-        metadata={
-            "help": "Training learning rate"
-        },
+        default=5e-5,
+        metadata={"help": "Training learning rate"},
     )
     train_batch_size: int = field(
-        default = 16,
-        metadata={
-            "help": "Training batch size"
-        },
+        default=16,
+        metadata={"help": "Training batch size"},
     )
     valid_batch_size: int = field(
-        default = 16,
-        metadata={
-            "help": "Validation batch size"
-        },
+        default=16,
+        metadata={"help": "Validation batch size"},
     )
     accumulation_step: int = field(
-        default = 10,
-        metadata={
-            "help": "Training accumulation step"
-        },
+        default=10,
+        metadata={"help": "Training accumulation step"},
     )
     sample_logging_step: int = field(
-        default = 50,
-        metadata={
-            "help": "Print samples for each set value."
-        },
+        default=50,
+        metadata={"help": "Print samples for each set value."},
     )
     sample_logging_amount: int = field(
-        default = 5,
-        metadata={
-            "help": "Number of samples you want to print"
-        },
+        default=5,
+        metadata={"help": "Number of samples you want to print"},
     )
     overwite: bool = field(
-        default = True, # False
-        metadata={
-            "help": "whether overwrite or not"
-        },
+        default=True,  # False
+        metadata={"help": "whether overwrite or not"},
     )
+
 
 @dataclass
 class QuestionGenerationArguments:
     """
     Arguments for Question Generation
     """
+
     data_path: Optional[str] = field(
-        default= "../data/",
+        default="../data/",
         metadata={"help": "path for data"},
     )
 
     context_path: Optional[str] = field(
-        default= "wikipedia_documents.json",
+        default="wikipedia_documents.json",
         metadata={"help": "exact path for wiki json file"},
     )

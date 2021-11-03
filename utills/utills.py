@@ -27,6 +27,9 @@ def config_setting(data_args: DataTrainingArguments,
     #config.retriver_model = developing ...
 
     # 훈련 관련 정보 설정 및 저장
+    training_args.logging_strategy = "steps"
+    training_args.logging_steps = 300
+    training_args.fp16 = True
     training_args.evaluation_strategy = "steps"
     training_args.eval_steps = 1  # evaluation step.
     training_args.overwrite_output_dir = custom_args.overwite
@@ -42,6 +45,27 @@ def config_setting(data_args: DataTrainingArguments,
     print(training_args.num_train_epochs)
     
     return config
+
+def config_setting_for_dense_retrieval(
+    data_args: DataTrainingArguments,
+    custom_args: CustomArguments):
+    '''
+    WandB info에서 더 보고 싶은 정보 변수로 추가
+    E.g.
+    config.num_of_hidden_layer = 5
+    config.seed = training_args.seed
+    '''
+    config = wandb.config
+    config.dense_base_model = data_args.dense_base_model
+    config.dense_passage_retrieval_name = data_args.dense_passage_retrieval_name
+    config.dense_question_retrieval_name = data_args.dense_question_retrieval_name
+    config.dense_train_epoch = data_args.dense_train_epoch
+    config.dense_train_batch_size = data_args.dense_train_batch_size
+    config.dense_train_learning_rate = data_args.dense_train_learning_rate
+    config.dense_train_output_dir = data_args.dense_train_output_dir
+    
+    return config
+
 
 def logging_console(question_context, predictions, ground_truth):
     print('Q and Context: ')

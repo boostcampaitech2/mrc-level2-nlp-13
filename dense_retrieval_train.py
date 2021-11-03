@@ -3,224 +3,219 @@ from retrieval_module.retrieval_dataset import *
 
 from transformers import AutoTokenizer
 from transformers import AdamW, get_linear_schedule_with_warmup
-from transformers import RobertaModel, BertPreTrainedModel, BertModel
-from transformers.models.roberta.modeling_roberta import RobertaEncoder
+from transformers import RobertaModel
+from transformers import HfArgumentParser, TrainingArguments
 
 import torch
-from torch.nn import TripletMarginLoss
-from torch.optim.lr_scheduler import CosineAnnealingLR
 import torch.nn.functional as F
 
+from arguments import (
+    DataTrainingArguments,
+    CustomArguments
+)
 
-def main():
-    num_negative = 11
-    max_seq_length = 384
-    batch_size = 1
-    triplet_loss = TripletMarginLoss(margin=1.5, p=2)
-    # tokenizer 준비
-    model_name = 'klue/roberta-small' # "bert-base-multilingual-cased"#
-    tokenizer = AutoTokenizer.from_pretrained(model_name)
+from tqdm import trange, tqdm
+from utills.utills import config_setting_for_dense_retrieval
+import wandb
 
-    # 학습 및 검증 데이터 준비
-    train_dataloader, valid_loader, valid_q_loader, ground_truth = prepare_data(tokenizer, max_seq_length, num_negative)
- 
-    # 모델 준비
-    #p_encoder = BertEncoder.from_pretrained(model_name)
-    #q_encoder = BertEncoder.from_pretrained(model_name)
-    p_encoder = BertEncoder.from_pretrained('kiyoung2/dpr_p-encoder_roberta-small')
-    q_encoder = BertEncoder.from_pretrained('kiyoung2/dpr_q-encoder_roberta-small')
-    # p_encoder = RobertaEncoder.from_pretrained(model_name)
-    # q_encoder = RobertaEncoder.from_pretrained(model_name)
-
-    #RobertaEncoder
-    # p_encoder = RobertaEncoder(model_name)
-    # q_encoder = RobertaEncoder(model_name) 
-    
-    # for param in p_encoder.parameters():
-    #     param.requires_grad = False
-
-    if torch.cuda.is_available():
-        p_encoder.cuda()
-        q_encoder.cuda()
-    no_decay = ['bias', 'LayerNorm.weight']
-    optimizer_grouped_parameters = [
-        # p_encoder.parameters(),
-        # q_encoder.parameters()
-        {'params': [p for n, p in p_encoder.named_parameters() if not any(nd in n for nd in no_decay)], 'weight_decay': 0.001},
-        {'params': [p for n, p in p_encoder.named_parameters() if any(nd in n for nd in no_decay)], 'weight_decay': 0.0},
-        {'params': [p for n, p in q_encoder.named_parameters() if not any(nd in n for nd in no_decay)], 'weight_decay': 0.001},
-        {'params': [p for n, p in q_encoder.named_parameters() if any(nd in n for nd in no_decay)], 'weight_decay': 0.0}
-        ]
-    optimizer = AdamW(optimizer_grouped_parameters, lr=5e-1, eps=1e-08, weight_decay=0.01)
-    t_total = len(train_dataloader) // 1 * 50 #(gradient_accumulation_steps, epoch)
-    #scheduler = get_linear_schedule_with_warmup(optimizer, num_warmup_steps=100, num_training_steps=t_total)
-    scheduler = CosineAnnealingLR(optimizer, 10)
-    # 훈련 시작!
-    train(tokenizer, q_encoder, p_encoder, optimizer, scheduler, triplet_loss,  train_dataloader, valid_loader, valid_q_loader, ground_truth, batch_size, num_negative)
-
-def train(tokenizer, q_encoder, p_encoder, optimizer, scheduler, criterion, train_dataloader, valid_loader, valid_q_loader, ground_truth, batch_size, num_negative):
+def train(tokenizer, q_encoder, p_encoder, optimizer, scheduler, train_dataloader, valid_context, valid_question, data_args):
     print('Start train!!')
     device = 'cuda:0' if torch.cuda.is_available() else 'cpu'
   
     q_encoder.zero_grad()
     p_encoder.zero_grad()
     torch.cuda.empty_cache()
-    best_metric = 0
+    best_metric_top_1 = 0
+    best_metric_top_3 = 0
+    best_metric_top_10 = 0
+    best_metric_top_35 = 0
 
-    for epoch in range(0, 51):        
+    train_iterator = trange(int(data_args.dense_train_epoch), desc="Epoch")
+    for epoch in train_iterator:    
+        epoch_iterator = tqdm(train_dataloader, desc="Iteration")    
         # Train
-        train_loss = train_per_epoch(tokenizer, q_encoder, p_encoder, optimizer, criterion, train_dataloader, batch_size, num_negative, device)
+        train_loss = train_per_epoch(q_encoder, p_encoder, optimizer, epoch_iterator, data_args)
         
         # Valid
-        top_1_acc, top_3_acc, top_5_acc = valid_per_epoch(p_encoder, q_encoder, valid_loader, valid_q_loader, ground_truth)
+        top_1_acc, top_3_acc, top_10_acc, top_35_acc, top_100_acc = valid_per_epoch(tokenizer, p_encoder, q_encoder, valid_context, valid_question, data_args)
 
         # logging
-        print(f'epoch: {epoch} | train_loss:{train_loss:.5f} top-1 acc: {top_1_acc*100:.2f} | top-3 acc: {top_3_acc*100:.2f} | top-5 acc: {top_5_acc*100:.2f}')
+        print(f'epoch: {epoch} | train_loss:{train_loss:.5f} | '
+              f'top-1 acc: {top_1_acc:.2f} | '
+              f'top-3 acc: {top_3_acc:.2f} | '
+              f'top-10 acc: {top_10_acc:.2f} | '
+              f'top-35 acc: {top_35_acc:.2f} | '
+              f'top-100 acc: {top_100_acc:.2f} | ')
 		
         scheduler.step()
-        # 10 에폭 단위 저장
-        if epoch % 10 == 0 and epoch > 0:
-            q_encoder.save_pretrained(f'./models_result/roberta-base_retriever/{epoch}ep/q_encoder')
-            p_encoder.save_pretrained(f'./models_result/roberta-base_retriever/{epoch}ep/p_encoder')
-            print('{epoch} saved!')
-        
+
+        # 에폭 단위 저장       
+        q_encoder.save_pretrained(f'{data_args.dense_train_output_dir}/{epoch}ep/q_encoder')
+        p_encoder.save_pretrained(f'{data_args.dense_train_output_dir}/{epoch}ep/p_encoder')
+        print(f'{epoch} saved!')
+
+        wandb.log({
+            'epoch': epoch,
+            'train_loss': train_loss,
+            'top-1 acc': top_1_acc,
+            'top-3 acc': top_3_acc,
+            'top-10 acc': top_10_acc,
+            'top-35 acc': top_35_acc,
+            'top-100 acc': top_100_acc,
+        })
+
         # best 모델 저장 top_1_acc 기준
+        if top_1_acc > best_metric_top_1:
+            best_metric_top_1 = top_1_acc
+            q_encoder.save_pretrained(f'{data_args.dense_train_output_dir}/best/q_encoder')
+            p_encoder.save_pretrained(f'{data_args.dense_train_output_dir}/best/p_encoder')
+            print('best top-1 saved!')
+        elif top_3_acc > best_metric_top_3:
+            best_metric_top_3 = top_3_acc
+            q_encoder.save_pretrained(f'{data_args.dense_train_output_dir}/best/q_encoder')
+            p_encoder.save_pretrained(f'{data_args.dense_train_output_dir}/best/p_encoder')
+            print('best top-3 saved!')
+        elif top_10_acc > best_metric_top_10:
+            best_metric_top_10 = top_10_acc
+            q_encoder.save_pretrained(f'{data_args.dense_train_output_dir}/best/q_encoder')
+            p_encoder.save_pretrained(f'{data_args.dense_train_output_dir}/best/p_encoder')
+            print('best top-10 saved!')
+        elif top_35_acc > best_metric_top_35:
+            best_metric_top_35 = top_35_acc
+            q_encoder.save_pretrained(f'{data_args.dense_train_output_dir}/best/q_encoder')
+            p_encoder.save_pretrained(f'{data_args.dense_train_output_dir}/best/p_encoder')
+            print('best top-35 saved!')
 
-        if top_1_acc > best_metric:
-            best_metric = top_1_acc
-            q_encoder.save_pretrained(f'./models_result/roberta-base_retriever/best/q_encoder')
-            p_encoder.save_pretrained(f'./models_result/roberta-base_retriever/best/p_encoder')
-            print('best saved!')
-
-def train_per_epoch(tokenizer, q_encoder, p_encoder, optimizer, criterion, train_dataloader, batch_size, num_negative, device):
+def train_per_epoch(q_encoder, p_encoder, optimizer, epoch_iterator, data_args):
     batch_loss = 0
-    optimizer.zero_grad()
+    for step, batch in enumerate(epoch_iterator):
+      q_encoder.train()
+      p_encoder.train()
+      
+      if torch.cuda.is_available():
+        batch = tuple(t.cuda() for t in batch)
 
-    for step, (passage_item, question_item) in enumerate(tqdm(train_dataloader)):
-        q_encoder.train() # (batch_size, 4, 384) 
-        #p_encoder.train()
+      p_inputs = {'input_ids': batch[0],
+                  'attention_mask': batch[1],
+                  'token_type_ids': batch[2]
+                  }
+      
+      q_inputs = {'input_ids': batch[3],
+                  'attention_mask': batch[4],
+                  'token_type_ids': batch[5]}
+      
+      p_outputs = p_encoder(**p_inputs).pooler_output  # (batch_size, emb_dim)
+      q_outputs = q_encoder(**q_inputs).pooler_output  # (batch_size, emb_dim)
 
-        targets = torch.zeros(batch_size).long().to(device)
-        p_inputs = {'input_ids': passage_item['input_ids'].view(
-                                    batch_size*(num_negative), -1).to(device), # (batch_size * 4, 384)  =
-                'attention_mask': passage_item['attention_mask'].view(
-                                    batch_size*(num_negative), -1).to(device)
-                }
+      # Calculate similarity score & loss
+      sim_scores = torch.matmul(q_outputs, torch.transpose(p_outputs, 0, 1))  # (batch_size, emb_dim) x (emb_dim, batch_size) = (batch_size, batch_size)
 
-        q_inputs = {'input_ids': question_item['input_ids'].to(device),
-                'attention_mask': question_item['attention_mask'].to(device)
-                }
-                                            # (batch_size, 10, 768) 0: positive 1~9: negative // [:, 0, :] / [:, 1:, :]
-        # .view(batch_size*(num_negative), -1)
+      # target: position of positive samples = diagonal element 
+      targets = torch.arange(0, len(batch[0])).long()
+      if torch.cuda.is_available():
+        targets = targets.to('cuda')
 
-        # positive_inputs = {'input_ids': passage_item['input_ids'][:, 0, :].view(batch_size, -1).to(device), # (batch_size * 4, 384)  =
-        #                 'attention_mask': passage_item['attention_mask'][:, 0, :].view(batch_size, -1).to(device)
-        #         }
-        # gg_idx = np.random.randint(0, 10)
-        # negative_inputs = {'input_ids': torch.reshape(passage_item['input_ids'][:, gg_idx, :], (batch_size, -1)).to(device), # (batch_size * 4, 384)  =
-        #                 'attention_mask': torch.reshape(passage_item['attention_mask'][:, gg_idx, :], (batch_size, -1)).to(device) #.view(batch_size*(num_negative-1), -1)
-        #         }
-        
-        # for i in range(batch_size):
-        #     # print(q_inputs['input_ids'][i])
-        #     # print(q_inputs['attention_mask'][i])
-        #     print(tokenizer.decode(q_inputs['input_ids'][i]))
-        #     print('-'*100)
-        #     # print(positive_inputs['input_ids'][i])
-        #     # print(positive_inputs['attention_mask'][i])
-        #     print(tokenizer.decode(positive_inputs['input_ids'][i]))
-        #     print('-'*100)
-        #     # print(negative_inputs['input_ids'][i])
-        #     # print(negative_inputs['attention_mask'][i])
-        #     print(tokenizer.decode(negative_inputs['input_ids'][i]))
-        #     print('-'*100)
-        #     print('')
-        #     print('')
-        # exit(0)
-        p_outputs = p_encoder(**p_inputs) #(batch_size * 11 * 768)
-        q_outputs = q_encoder(**q_inputs)
+      sim_scores = F.log_softmax(sim_scores, dim=1)
 
-        # positive_outputs = p_encoder(**positive_inputs) #(batch_size * 11 * 768),
-        # negaitive_outputs = p_encoder(**negative_inputs) #(batch_size * 33 * 768) #(num_neg+1), emb_dim) # (batch_size * 4, 768) 
-        #q_outputs = q_encoder(**q_inputs)  #(batch_size*, emb_dim)              (batch_size, 1, 768) 
-        
+      loss = F.nll_loss(sim_scores, targets)
 
-        # Calculate similarity score & loss
-        # positive_outputs = positive_outputs.view(batch_size, 768) #torch.transpose( p_outputs.pooler_output.view(batch_size, -1, 768), 1 , 2) # (batch_size, 4, 768) =>  (batch_size, 768, 4)
-        # negaitive_outputs = negaitive_outputs.view(batch_size, 768)
-        #print(p_outputs.size())
-        #print(p_outputs[0])
-        p_outputs = torch.transpose(p_outputs.pooler_output.view(batch_size, -1, 768), 1 , 2)
-        q_outputs = q_outputs.pooler_output.view(batch_size, 1, -1) #batch_size, 1, -1 (batch_size, 768) pooler_output
-        
-        # sim_scores = torch.matmul(q_outputs, p_outputs)
-        # sim_scores = sim_scores.view(batch_size, -1) 
-        # print(q_outputs.size())
-        # print(p_outputs.size())
-        # print(p_outputs[:,:,0])
-        # exit(0)
-        sim_scores = torch.bmm(q_outputs, p_outputs).squeeze()
-        #if step == 0: print(sim_scores)
-        sim_scores = sim_scores.view(batch_size, -1)
-        
-        sim_scores = F.log_softmax(sim_scores, dim=1) # 0번 유사도 점수가 높아지도록, 나머지는 낮아지도록 // [1., 0.5, 0.3, 02]
-        #if step == 0: print(sim_scores)
-        
-        loss = F.nll_loss(sim_scores, targets) # 0번이 가장 높게 -> loss 최소화 하도록 학습 [0, 0.5, 0.6, 0.8] 
-        #if step == 0: print(loss)
-        #loss = criterion(q_outputs, positive_outputs, negaitive_outputs)
-        # for pi in range(batch_size):
-        #     anchor = q_outputs[pi]
-        #     temp_positive = positive_outputs[pi, 0, :]
-        #     for ni in range(num_negative-1):
-        #         loss += 
-        #loss = torch.nn.NLLLoss()(sim_scores, targets)
-        
-        #break
+      loss.backward()
+      optimizer.step()
+      q_encoder.zero_grad()
+      p_encoder.zero_grad()
 
-        loss.backward()        
-        optimizer.step()
-        optimizer.zero_grad()
-        #q_encoder.zero_grad()
-        #p_encoder.zero_grad()
-        batch_loss += loss.detach().cpu().numpy()
-        torch.cuda.empty_cache()
-    return batch_loss / len(train_dataloader)
+      batch_loss += loss.detach().cpu().numpy()
+      torch.cuda.empty_cache()
+    return batch_loss / len(epoch_iterator)
 
-def valid_per_epoch(p_encoder, q_encoder, valid_loader, valid_q_loader, ground_truth):
+def valid_per_epoch(tokenizer, p_encoder, q_encoder, valid_context, valid_question, data_args):
     print(f'Valid start!')
     with torch.no_grad():
         p_encoder.eval()
-        q_encoder.eval()
-        
+
         p_embs = []
-        top_1_count = 0
-        top_3_count = 0
-        top_5_count = 0
-        for item in valid_loader:
-            p_emb = p_encoder(**item).pooler_output.to('cpu').numpy() # pooler_output
-            #p_emb = p_encoder(**item).to('cpu').numpy()
-            p_embs.extend(p_emb)
-        
-        p_embs = torch.Tensor(p_embs).squeeze()
-        #print(p_embs.size())
-        
-        for item, gt in tqdm(zip(valid_q_loader, ground_truth), total = len(valid_q_loader)):
-            q_emb = q_encoder(**item).pooler_output.to('cpu')  #(num_query, emb_dim)            # pooler_output
-            #q_emb = q_encoder(**item).to('cpu')  #(num_query, emb_dim)            
-            dot_prod_scores = torch.matmul(q_emb, torch.transpose(p_embs, 0, 1))
+        for p in valid_context:
+            p = tokenizer(p, max_length=data_args.dense_max_length, padding="max_length", truncation=True, return_tensors='pt').to('cuda')
+            p_emb = p_encoder(**p).pooler_output.to('cpu').numpy()
+            p_embs.append(p_emb)
 
-            rank = torch.argsort(dot_prod_scores, dim=1, descending=True).squeeze()
-            
-            if gt == rank[0]: top_1_count += 1
-            if gt in rank[0:10]: top_3_count += 1
-            if gt in rank[0:30]: top_5_count += 1
+        p_embs = torch.Tensor(p_embs).squeeze()  # (num_passage, emb_dim)
+
+    top_1 = 0
+    top_3 = 0
+    top_10 = 0
+    top_25 = 0
+    top_35 = 0
+    top_100 = 0
+    q_encoder.eval()
+    for sample_idx in tqdm(range(len(valid_question))):
+        query = valid_question[sample_idx]
+
+        q_seqs_val = tokenizer([query], max_length=80, padding="max_length", truncation=True, return_tensors='pt').to('cuda')
+        q_emb = q_encoder(**q_seqs_val).pooler_output.to('cpu')  #(num_query, emb_dim)
+
+        dot_prod_scores = torch.matmul(q_emb, torch.transpose(p_embs, 0, 1))
+        rank = torch.argsort(dot_prod_scores, dim=1, descending=True).squeeze()
+
+        if sample_idx == rank[0]: 
+            top_1 += 1
+        if sample_idx in rank[0:3]: 
+            top_3 += 1
+        if sample_idx in rank[0:10]: 
+            top_10 += 1
+        if sample_idx in rank[0:25]: 
+            top_25 += 1
+        if sample_idx in rank[0:35]: 
+            top_35 += 1
+        if sample_idx in rank[0:100]: 
+            top_100 += 1
     
-    top_1_acc = top_1_count / len(valid_q_loader)
-    top_3_acc = top_3_count / len(valid_q_loader)
-    top_5_acc = top_5_count / len(valid_q_loader)
+    return top_1/len(valid_question) * 100, top_3/len(valid_question) * 100, top_10/len(valid_question) * 100, top_35/len(valid_question) * 100, top_100/len(valid_question) * 100
 
-    return top_1_acc, top_3_acc, top_5_acc
+def main():
+    parser = HfArgumentParser(
+        (DataTrainingArguments, CustomArguments)
+    )
+    data_args, cus_args = parser.parse_args_into_dataclasses()
+
+    if cus_args.use_wandb:
+        config = config_setting_for_dense_retrieval(data_args, cus_args)
+        wandb.init(project=cus_args.project_name, entity=cus_args.entity_name, name=cus_args.wandb_run_name, config=config)
+
+
+    # tokenizer 준비
+    print('Loading tokenizer')
+    tokenizer = AutoTokenizer.from_pretrained(data_args.dense_base_model)
+
+    # 학습 및 검증 데이터 준비
+    print('Loading data')
+    train_dataloader, valid_context, valid_question = prepare_data(tokenizer, data_args.dense_train_batch_size, data_args.dense_max_length)
+ 
+    # 모델 준비
+    print('Loading models')
+    p_encoder = RobertaModel.from_pretrained(data_args.dense_base_model)
+    q_encoder = RobertaModel.from_pretrained(data_args.dense_base_model)
+    
+    if torch.cuda.is_available():
+        p_encoder.cuda()
+        q_encoder.cuda()
+
+    no_decay = ['bias', 'LayerNorm.weight']
+    optimizer_grouped_parameters = [
+        {'params': [p for n, p in p_encoder.named_parameters() if not any(nd in n for nd in no_decay)], 'weight_decay': 0.001},
+        {'params': [p for n, p in p_encoder.named_parameters() if any(nd in n for nd in no_decay)], 'weight_decay': 0.0},
+        {'params': [p for n, p in q_encoder.named_parameters() if not any(nd in n for nd in no_decay)], 'weight_decay': 0.001},
+        {'params': [p for n, p in q_encoder.named_parameters() if any(nd in n for nd in no_decay)], 'weight_decay': 0.0}
+        ]
+    optimizer = AdamW(optimizer_grouped_parameters, lr=data_args.dense_train_learning_rate, eps=1e-08, weight_decay=0.01)
+    t_total = len(train_dataloader) // 1 * 50 #(gradient_accumulation_steps, epoch)
+    scheduler = get_linear_schedule_with_warmup(optimizer, num_warmup_steps=100, num_training_steps=t_total)
+    
+    if cus_args.use_wandb:
+        wandb.watch(p_encoder)
+
+    # 훈련 시작!
+    train(tokenizer, q_encoder, p_encoder, optimizer, scheduler, train_dataloader, valid_context, valid_question, data_args)
 
 if __name__=='__main__':
     main()
