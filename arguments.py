@@ -15,13 +15,13 @@ class ModelArguments:
         },
     )
     config_name: Optional[str] = field(
-        default="klue/roberta-large",
+        default="monologg/koelectra-base-v3-discriminator",
         metadata={
             "help": "Pretrained config name or path if not the same as model_name"
         },
     )
     tokenizer_name: Optional[str] = field(
-        default="klue/roberta-large",
+        default="monologg/koelectra-base-v3-discriminator",
         metadata={
             "help": "Pretrained tokenizer name or path if not the same as model_name"
         },
@@ -106,14 +106,14 @@ class DataTrainingArguments:
         },
     )
     dense_passage_retrieval_name: str = field(
-        default="./models_result/roberta_small_dense_retireval_v2/best/p_encoder",
+        default="./models_result/roberta_small_dense_retireval_v3/27ep/p_encoder",
         metadata={
             "help": "Path to pretrained model"
         },
 
     )
     dense_question_retrieval_name: str = field(
-        default="./models_result/roberta_small_dense_retireval_v2/best/q_encoder",
+        default="./models_result/roberta_small_dense_retireval_v3/27ep/q_encoder",
         metadata={
             "help": "Path to pretrained model"
         },

@@ -96,7 +96,7 @@ class DenseRetrieval(RetrievalBasic):
             Passage Embedding을 만들어 self에 저장 
         """
         print('Tokenize passage')
-        item = self.p_tokenizer(self.contexts, max_length=384, padding="max_length", truncation=True, return_tensors='pt')
+        item = self.p_tokenizer(self.contexts, max_length=500, padding="max_length", truncation=True, return_tensors='pt')
         p_dataset = RetrievalValidDataset(input_ids=item['input_ids'], attention_mask=item['attention_mask'])
         p_loader = DataLoader(p_dataset, batch_size=16)
 
@@ -154,7 +154,7 @@ class DenseRetrieval(RetrievalBasic):
                     query_or_dataset["question"], k=topk
                 )
             for idx, example in enumerate(
-                tqdm(query_or_dataset, desc="Sparse retrieval: ")
+                tqdm(query_or_dataset, desc="Dense retrieval: ")
             ):
                 tmp = {
                     # Query와 해당 id를 반환합니다.
@@ -186,9 +186,9 @@ class DenseRetrieval(RetrievalBasic):
         Note:
             vocab 에 없는 이상한 단어로 query 하는 경우 assertion 발생 (예) 뙣뙇?
         """
-        q_seqs_val = self.q_tokenizer([query], padding="max_length", truncation=True, return_tensors='pt').to('cuda')
+        q_seqs_val = self.q_tokenizer([query], max_length=80, padding="max_length", truncation=True, return_tensors='pt').to('cuda')
 
-        print('Make passage embedding vectors')
+        print('Make top-k passage per query')
         q_emb = q_encoder(**q_seqs_val).pooler_output.detach().cpu()  #(num_query, emb_dim)
         dot_prod_scores = torch.matmul(q_emb, torch.transpose(self.passage_embedding_vectors, 0, 1))
 
@@ -213,7 +213,7 @@ class DenseRetrieval(RetrievalBasic):
             vocab 에 없는 이상한 단어로 query 하는 경우 assertion 발생 (예) 뙣뙇?
         """
         print('Get passage per each question')
-        q_seqs_val = self.q_tokenizer(queries, padding="max_length", truncation=True, return_tensors='pt').to('cuda')
+        q_seqs_val = self.q_tokenizer(queries, max_length=80, padding="max_length", truncation=True, return_tensors='pt').to('cuda')
         q_dataset = RetrievalValidDataset(input_ids=q_seqs_val['input_ids'], attention_mask=q_seqs_val['attention_mask'])
         q_loader = DataLoader(q_dataset, batch_size=1)
         

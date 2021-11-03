@@ -362,6 +362,7 @@ def run_mrc(
     logger.info("*** Evaluate ***")
 
     #### eval dataset & eval example - predictions.json 생성됨
+    training_args.per_device_eval_batch_size = 16
     if training_args.do_predict:
         predictions = trainer.predict(
             test_dataset=eval_dataset, test_examples=datasets["validation"]
