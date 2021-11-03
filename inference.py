@@ -93,6 +93,12 @@ def main():
         config=config,
     )
 
+    # model = AutoModelForQuestionAnswering.from_pretrained(
+    #     model_args.model_name_or_path,
+    #     #from_tf=bool(".ckpt" in model_args.model_name_or_path),
+    #     #config=config,
+    # )
+
     # True일 경우 : run passage retrieval
     if data_args.eval_retrieval:
         if data_args.kind_of_retrieval == "Sparse":
