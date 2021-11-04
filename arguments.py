@@ -10,7 +10,7 @@ from typing import Any, Dict, List, Optional
 # klue/roberta-large
 # epoch 10 - 0.551
 # tunib/electra-ko-en-base
-
+# tunib/electra-ko-base
 
 @dataclass
 class ModelArguments:
@@ -19,19 +19,19 @@ class ModelArguments:
     """
 
     model_name_or_path: str = field(
-        default="klue/roberta-large",
+        default="tunib/electra-ko-base",
         metadata={
             "help": "Path to pretrained model or model identifier from huggingface.co/models"
         },
     )
     config_name: Optional[str] = field(
-        default="klue/roberta-large",
+        default="tunib/electra-ko-base",
         metadata={
             "help": "Pretrained config name or path if not the same as model_name"
         },
     )
     tokenizer_name: Optional[str] = field(
-        default="monologg/koelectra-base-v3-discriminator",
+        default="tunib/electra-ko-base",
         metadata={
             "help": "Pretrained tokenizer name or path if not the same as model_name"
         },
@@ -44,7 +44,7 @@ class DataTrainingArguments:
     """
 
     dataset_name: Optional[str] = field(
-        default="./data/train_dataset",
+        default="../data/train_dataset",
         metadata={"help": "The name of the dataset to use."},
     )
     overwrite_cache: bool = field(
@@ -56,7 +56,7 @@ class DataTrainingArguments:
         metadata={"help": "The number of processes to use for the preprocessing."},
     )
     max_seq_length: int = field(
-        default=450,
+        default=384,
         metadata={
             "help": "The maximum total input sequence length after tokenization. Sequences longer "
             "than this will be truncated, sequences shorter will be padded."
