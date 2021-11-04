@@ -101,11 +101,16 @@ def main():
     #     from_tf=bool(".ckpt" in model_args.model_name_or_path),
     #     config=config,
     # )
-
-    model = MyRobertaForQuestionAnswering.from_pretrained(
+    
+    model = AutoModelForQuestionAnswering.from_pretrained(
         model_args.model_name_or_path,
         config=config,
     )
+
+    # model = MyRobertaForQuestionAnswering.from_pretrained(
+    #     model_args.model_name_or_path,
+    #     config=config,
+    # )
 
     print(
         type(training_args),

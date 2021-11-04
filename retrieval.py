@@ -273,7 +273,99 @@ class DenseRetrieval(RetrievalBasic):
                 doc_scores.append(dot_prod_scores[rank[:k]].detach().cpu().numpy())
                 doc_indices.append(rank[:k].detach().cpu().numpy())
         return doc_scores, doc_indices
-        
+
+class ElasticSearch():
+    def __init__(self):
+        print("Start Elastic Search init")
+        es_server = Popen(['../elastic/elasticsearch-7.9.2/bin/elasticsearch'],
+                   stdout=PIPE, stderr=STDOUT,
+                   preexec_fn=lambda: os.setuid(1)
+                  )
+        time.sleep(30)
+        es = Elasticsearch('localhost:9200')
+        if es.indices.exists('document'):
+            es.indices.delete(index='document')
+        es.indices.create(index = 'document',
+                body = {
+                    'settings':{
+                        'analysis':{
+                            'analyzer':{
+                                'my_analyzer':{
+                                    "type": "custom",
+                                    'tokenizer':'nori_tokenizer',
+                                    'decompound_mode':'mixed',
+                                    'stopwords':'_korean_',
+                                    'synonyms':'_korean_',
+                                    "filter": ["lowercase",
+                                                "my_shingle_f",
+                                                "nori_readingform",
+                                                "nori_number",
+                                                "cjk_bigram",
+                                                "decimal_digit",
+                                                "stemmer",
+                                                "trim"]
+                                }
+                            },
+                            'filter':{
+                                'my_shingle_f':{
+                                    "type": "shingle"
+                                }
+                            }
+                        },
+                        'similarity':{
+                            'my_similarity':{
+                                'type':'BM25',
+                            #   'type':'boolean',
+                            }
+                        }
+                    },
+                    'mappings':{
+                        'properties':{
+                            'title':{
+                                'type':'text',
+                                'analyzer':'my_analyzer',
+                                'similarity':'my_similarity'
+                            },
+                            'text':{
+                                'type':'text',
+                                'analyzer':'my_analyzer',
+                                'similarity':'my_similarity'
+                            },
+                            'text_origin':{
+                                'type':'text',
+                                'analyzer':'my_analyzer',
+                                'similarity':'my_similarity'
+                            }
+                        }
+                    }
+                }
+        )
+
+        df = make_elastic_data()
+        buffer = []
+        rows = 0
+
+        for num in tqdm(range(len(df))):
+            article = {"_id": num,
+                    "_index": "document", 
+                    "title" : df['title'][num],
+                    "text" : df['text'][num],
+                    "text_origin" : df['text_origin'][num]}
+            buffer.append(article)
+            rows += 1
+            if rows % 3000 == 0:
+                helpers.bulk(es, buffer)
+                buffer = []
+                print("Inserted {} articles".format(rows), end="\r")
+                time.sleep(1)
+
+        if buffer:
+            helpers.bulk(es, buffer)
+        self.es = es
+
+    def get_es(self):
+        return self.es
+
 class SparseRetrieval(RetrievalBasic):
     def __init__(
         self,
@@ -365,95 +457,8 @@ class SparseRetrieval(RetrievalBasic):
 
         elif self.embedding_form == "ES":
             print("Start Elastic Search")
-
-            es_server = Popen(['../elastic/elasticsearch-7.9.2/bin/elasticsearch'],
-                   stdout=PIPE, stderr=STDOUT,
-                   preexec_fn=lambda: os.setuid(1)
-                  )
-            time.sleep(30)
-            es = Elasticsearch('localhost:9200')
-            if es.indices.exists('document'):
-                es.indices.delete(index='document')
-            es.indices.create(index = 'document',
-                  body = {
-                      'settings':{
-                          'analysis':{
-                              'analyzer':{
-                                  'my_analyzer':{
-                                      "type": "custom",
-                                      'tokenizer':'nori_tokenizer',
-                                      'decompound_mode':'mixed',
-                                      'stopwords':'_korean_',
-                                      'synonyms':'_korean_',
-                                      "filter": ["lowercase",
-                                                 "my_shingle_f",
-                                                 "nori_readingform",
-                                                 "nori_number",
-                                                 "cjk_bigram",
-                                                 "decimal_digit",
-                                                 "stemmer",
-                                                 "trim"]
-                                  }
-                              },
-                              'filter':{
-                                  'my_shingle_f':{
-                                      "type": "shingle"
-                                  }
-                              }
-                          },
-                          'similarity':{
-                              'my_similarity':{
-                                  'type':'BM25',
-                                #   'type':'boolean',
-                              }
-                          }
-                      },
-                      'mappings':{
-                          'properties':{
-                              'title':{
-                                  'type':'text',
-                                  'analyzer':'my_analyzer',
-                                  'similarity':'my_similarity'
-                              },
-                              'text':{
-                                  'type':'text',
-                                  'analyzer':'my_analyzer',
-                                  'similarity':'my_similarity'
-                              },
-                              'text_origin':{
-                                  'type':'text',
-                                  'analyzer':'my_analyzer',
-                                  'similarity':'my_similarity'
-                              }
-                          }
-                      }
-                  }
-            )
-
-            df = make_elastic_data()
-            buffer = []
-            rows = 0
-
-            for num in tqdm(range(len(df))):
-                article = {"_id": num,
-                        "_index": "document", 
-                        "title" : df['title'][num],
-                        "text" : df['text'][num],
-                        "text_origin" : df['text_origin'][num]}
-                buffer.append(article)
-                rows += 1
-                if rows % 3000 == 0:
-                    helpers.bulk(es, buffer)
-                    buffer = []
-                    print("Inserted {} articles".format(rows), end="\r")
-                    time.sleep(1)
-
-            if buffer:
-                helpers.bulk(es, buffer)
-
-            self.es = es
-            print("Total articles inserted: {}".format(rows))
-
+            self.es = ElasticSearch()
+            print("Finish Elastic Search")
 
 
     def build_faiss(self, num_clusters=64) -> NoReturn:
@@ -659,11 +664,9 @@ class SparseRetrieval(RetrievalBasic):
             doc_indices = []
             for query in tqdm(queries):
                 res = self.es.search(index = "document",q=query, size=k)
-                # print([hit['_score'] for hit in res['hits']['hits']])
-                # print([int(hit['_id']) for hit in res['hits']['hits']])
                 doc_score.append([hit['_score'] for hit in res['hits']['hits']])
                 doc_indices.append([int(hit['_id']) for hit in res['hits']['hits']])
-            
+            print("----- Finish Calculate Elastic Search -----")
             return doc_score, doc_indices
 
 
