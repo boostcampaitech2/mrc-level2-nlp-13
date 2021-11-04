@@ -78,7 +78,7 @@ class DataTrainingArguments:
         metadata={"help": "Whether to run passage retrieval using sparse embedding."},
     )
     kind_of_retrieval: str = field(
-        default="Sparse",  # SparseDense
+        default="Joint",  # SparseDenseJoint
         metadata={"help": "Kind of retrieval."},
     )
     num_clusters: int = field(
@@ -106,14 +106,14 @@ class DataTrainingArguments:
         },
     )
     dense_passage_retrieval_name: str = field(
-        default="./models_result/roberta_small_dense_retireval_v3/27ep/p_encoder",
+        default="./encoders/p_encoder",
         metadata={
             "help": "Path to pretrained model"
         },
 
     )
     dense_question_retrieval_name: str = field(
-        default="./models_result/roberta_small_dense_retireval_v3/27ep/q_encoder",
+        default="./encoders/p_encoder",
         metadata={
             "help": "Path to pretrained model"
         },

@@ -88,6 +88,7 @@ def main():
         else model_args.model_name_or_path,
         use_fast=True,
     )
+    
     model = MyRobertaForQuestionAnswering.from_pretrained(
         model_args.model_name_or_path,
         config=config,
@@ -114,10 +115,71 @@ def main():
                 training_args,
                 data_args,
             )
+        elif data_args.kind_of_retrieval == "Joint":
+            datasets = run_joint_retrieval(
+                tokenizer.tokenize,
+                datasets,
+                training_args,
+                data_args,
+            )
 
     # eval or predict mrc model
     if training_args.do_eval or training_args.do_predict:
         run_mrc(data_args, training_args, model_args, datasets, tokenizer, model)
+
+def run_joint_retrieval(
+    sparse_tokenize_fn,
+    data_path: Optional[str] = "../data/",
+    context_path: Optional[str] = "wikipedia_documents.json",
+    embedding_form : Optional[str] = "BM25"
+) -> DatasetDict:
+    
+    p_tokenizer = AutoTokenizer.from_pretrained('klue/roberta-small')
+    q_tokenizer = AutoTokenizer.from_pretrained('klue/roberta-small')
+    
+    p_encoder = RobertaModel.from_pretrained(data_args.dense_passage_retrieval_name).to('cuda')
+    q_encoder = RobertaModel.from_pretrained(data_args.dense_passage_retrieval_name).to('cuda')
+    
+    retriever = JointRetrieval(
+        sparse_tokenize_fn,
+        dense_tokenizer = (p_tokenizer, q_tokenizer),
+        encoders = (p_encoder, q_encoder),
+        data_path,
+        context_path,
+        embedding_form
+    )
+
+    df = retriever.retrieve(datasets["validation"], topk=data_args.top_k_retrieval)
+
+    # test data 에 대해선 정답이 없으므로 id question context 로만 데이터셋이 구성됩니다.
+    if training_args.do_predict:
+        f = Features(
+            {
+                "context": Value(dtype="string", id=None),
+                "id": Value(dtype="string", id=None),
+                "question": Value(dtype="string", id=None),
+            }
+        )
+
+    # train data 에 대해선 정답이 존재하므로 id question context answer 로 데이터셋이 구성됩니다.
+    elif training_args.do_eval:
+        f = Features(
+            {
+                "answers": Sequence(
+                    feature={
+                        "text": Value(dtype="string", id=None),
+                        "answer_start": Value(dtype="int32", id=None),
+                    },
+                    length=-1,
+                    id=None,
+                ),
+                "context": Value(dtype="string", id=None),
+                "id": Value(dtype="string", id=None),
+                "question": Value(dtype="string", id=None),
+            }
+        )
+    datasets = DatasetDict({"validation": Dataset.from_pandas(df, features=f)})
+    return datasets
 
 
 def run_sparse_retrieval(
