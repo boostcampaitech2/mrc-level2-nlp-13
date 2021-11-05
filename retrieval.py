@@ -6,6 +6,8 @@ import faiss
 import pickle
 import numpy as np
 import pandas as pd
+import re
+import time
 
 from tqdm.auto import tqdm
 from contextlib import contextmanager
@@ -15,14 +17,26 @@ from retrieval_module.retrieval_dataset import *
 import torch
 from torch.utils.data import DataLoader
 from sklearn.feature_extraction.text import TfidfVectorizer
+import torch
+from torch.utils.data import DataLoader, TensorDataset, RandomSampler
+import torch.nn.functional as F
 from rank_bm25 import BM25Okapi
 from scipy import sparse as sp
 from datasets import (
     Dataset,
     load_from_disk,
     concatenate_datasets,
+    load_dataset
 )
 
+from transformers import (
+    AutoTokenizer, AutoModel,
+    BertModel, BertPreTrainedModel,BertConfig,
+    AdamW, get_linear_schedule_with_warmup,
+    TrainingArguments,
+)
+from subprocess import Popen, PIPE, STDOUT
+from elasticsearch import Elasticsearch, helpers
 
 @contextmanager
 def timer(name):
@@ -40,6 +54,8 @@ class RetrievalBasic:
 
         # Path 설정 및 데이터 로드
         self.data_path = data_path
+        print(type(data_path),data_path)
+        print(type(context_path),context_path)
         with open(os.path.join(data_path, context_path), "r", encoding="utf-8") as f:
             wiki = json.load(f)
 
@@ -52,11 +68,40 @@ class RetrievalBasic:
 
         # Set tokenizer
         self.tokenizer = tokenize_fn
+        self.p_embedding = None  # get_sparse_embedding()로 생성합니다.
+        self.indexer = None  # build_faiss()로 생성합니다.
 
-        # Define & init variables
-        self.q_embedding = None
-        self.p_embedding = None  
-        self.indexer = None
+def make_elastic_data():
+    with open('../data/wikipedia_documents.json', 'r') as f:
+        wiki_data = pd.DataFrame(json.load(f)).transpose()
+
+    wiki_data = wiki_data.drop_duplicates(['text']) # 3876
+    wiki_data = wiki_data.reset_index()
+    del wiki_data['index']
+
+    wiki_data['text_origin'] = wiki_data['text']
+
+    wiki_data['text_origin'] = wiki_data['text_origin'].apply(lambda x : ' '.join(re.sub(r'''[^ \r\nㄱ-ㅎㅏ-ㅣ가-힣a-zA-Z0-9ぁ-ゔァ-ヴー々〆〤一-龥~₩!@#$%^&*()“”‘’《》≪≫〈〉『』「」＜＞_+|{}:"<>?`\-=\\[\];',.\/·]''', ' ', str(x.lower().strip())).split()))
+
+    wiki_data['text'] = wiki_data['text'].apply(lambda x : x.replace('\\n\\n',' '))
+    wiki_data['text'] = wiki_data['text'].apply(lambda x : x.replace('\n\n',' '))
+    wiki_data['text'] = wiki_data['text'].apply(lambda x : x.replace('\\n',' '))
+    wiki_data['text'] = wiki_data['text'].apply(lambda x : x.replace('\n',' '))
+
+    wiki_data['text'] = wiki_data['text'].apply(lambda x : ' '.join(re.sub(r'''[^ \r\nㄱ-ㅎㅏ-ㅣ가-힣a-zA-Z0-9~₩!@#$%^&*()_+|{}:"<>?`\-=\\[\];',.\/]''', ' ', str(x.lower().strip())).split()))
+
+    title = []
+    text = []
+    text_origin = []
+
+    for num in tqdm(range(len(wiki_data))):
+        title.append(wiki_data['title'][num])
+        text.append(wiki_data['text'][num])
+        text_origin.append(wiki_data['text_origin'][num])
+
+    df = pd.DataFrame({'title':title,'text':text,'text_origin':text_origin})
+    return df    
+
 
 class DenseRetrieval(RetrievalBasic):
     def __init__(self, tokenizers, encoders, data_path: Optional[str] = "./data/", context_path: Optional[str] = "wikipedia_documents.json") -> NoReturn:
@@ -229,7 +274,103 @@ class DenseRetrieval(RetrievalBasic):
                 doc_scores.append(dot_prod_scores[rank[:k]].detach().cpu().numpy())
                 doc_indices.append(rank[:k].detach().cpu().numpy())
         return doc_scores, doc_indices
-        
+
+class ElasticSearch():
+    def __init__(self):
+        self.es_server = Popen(['../elastic/elasticsearch-7.9.2/bin/elasticsearch'],
+                   stdout=PIPE, stderr=STDOUT,
+                   preexec_fn=lambda: os.setuid(1)
+                  )
+        time.sleep(10)
+        self.es = Elasticsearch('localhost:9200')
+    
+    def set_elasticsearch(self):
+
+        """
+        Summary:
+            Elastic Search에 활용할 기본틀을 만들고
+            local 서버로 wiki 데이터를 저장합니다
+        """
+        if self.es.indices.exists('document'):
+            self.es.indices.delete(index='document')
+        self.es.indices.create(index = 'document',
+            body = {
+                'settings':{
+                    'analysis':{
+                        'analyzer':{
+                            'my_analyzer':{
+                                "type": "custom",
+                                'tokenizer':'nori_tokenizer',
+                                'decompound_mode':'mixed',
+                                'stopwords':'_korean_',
+                                'synonyms':'_korean_',
+                                "filter": ["lowercase",
+                                            "my_shingle_f",
+                                            "nori_readingform",
+                                            "nori_number",
+                                            "cjk_bigram",
+                                            "decimal_digit",
+                                            "stemmer",
+                                            "trim"]
+                            }
+                        },
+                        'filter':{
+                            'my_shingle_f':{
+                                "type": "shingle"
+                            }
+                        }
+                    },
+                    'similarity':{
+                        'my_similarity':{
+                            'type':'BM25',
+                        }
+                    }
+                },
+                'mappings':{
+                    'properties':{
+                        'title':{
+                            'type':'text',
+                            'analyzer':'my_analyzer',
+                            'similarity':'my_similarity'
+                        },
+                        'text':{
+                            'type':'text',
+                            'analyzer':'my_analyzer',
+                            'similarity':'my_similarity'
+                        },
+                        'text_origin':{
+                            'type':'text',
+                            'analyzer':'my_analyzer',
+                            'similarity':'my_similarity'
+                        }
+                    }
+                }
+            }
+        )
+
+        df = make_elastic_data()
+        buffer = []
+        rows = 0
+
+        for num in tqdm(range(len(df))):
+            article = {"_id": num,
+                    "_index": "document", 
+                    "title" : df['title'][num],
+                    "text" : df['text'][num],
+                    "text_origin" : df['text_origin'][num]}
+            buffer.append(article)
+            rows += 1
+            if rows % 3000 == 0:
+                helpers.bulk(self.es, buffer)
+                buffer = []
+                print("Inserted {} articles".format(rows), end="\r")
+                time.sleep(1)
+
+        if buffer:
+            helpers.bulk(self.es, buffer)
+    def get_elasticsearch(self):
+        return self.es
+
 class SparseRetrieval(RetrievalBasic):
     def __init__(
         self,
@@ -238,7 +379,6 @@ class SparseRetrieval(RetrievalBasic):
         context_path: Optional[str] = "wikipedia_documents.json",
         embedding_form : Optional[str] = "TF-IDF"
     ) -> NoReturn:
-        
         """
         Arguments:
             tokenize_fn:
@@ -282,7 +422,6 @@ class SparseRetrieval(RetrievalBasic):
         self.embedding_form = embedding_form
 
     def get_sparse_embedding(self) -> NoReturn:
-
         """
         Summary:
             Passage Embedding을 만들고
@@ -320,43 +459,13 @@ class SparseRetrieval(RetrievalBasic):
             tokenized_contexts = list(map(self.tokenizer, self.contexts))
             self.bm25 = BM25Okapi(tqdm(tokenized_contexts))
 
-
-    def build_faiss(self, num_clusters=64) -> NoReturn:
-
-        """
-        Summary:
-            속성으로 저장되어 있는 Passage Embedding을
-            Faiss indexer에 fitting 시켜놓습니다.
-            이렇게 저장된 indexer는 `get_relevant_doc`에서 유사도를 계산하는데 사용됩니다.
-
-        Note:
-            Faiss는 Build하는데 시간이 오래 걸리기 때문에,
-            매번 새롭게 build하는 것은 비효율적입니다.
-            그렇기 때문에 build된 index 파일을 저정하고 다음에 사용할 때 불러옵니다.
-            다만 이 index 파일은 용량이 1.4Gb+ 이기 때문에 여러 num_clusters로 시험해보고
-            제일 적절한 것을 제외하고 모두 삭제하는 것을 권장합니다.
-        """
-
-        indexer_name = f"faiss_clusters{num_clusters}.index"
-        indexer_path = os.path.join(self.data_path, indexer_name)
-        if os.path.isfile(indexer_path):
-            print("Load Saved Faiss Indexer.")
-            self.indexer = faiss.read_index(indexer_path)
-
-        else:
-            p_emb = self.p_embedding.astype(np.float32).toarray()
-            emb_dim = p_emb.shape[-1]
-
-            num_clusters = num_clusters
-            quantizer = faiss.IndexFlatL2(emb_dim)
-
-            self.indexer = faiss.IndexIVFScalarQuantizer(
-                quantizer, quantizer.d, num_clusters, faiss.METRIC_L2
-            )
-            self.indexer.train(p_emb)
-            self.indexer.add(p_emb)
-            faiss.write_index(self.indexer, indexer_path)
-            print("Faiss Indexer Saved.")
+        elif self.embedding_form == "ES":
+            print("Start Elastic Search")
+            es = ElasticSearch()
+            print("Set Elastic Search")
+            es.set_elasticsearch()
+            print("Finish Elastic Search")
+            self.es = es
 
     def retrieve(
         self, query_or_dataset: Union[str, Dataset], topk: Optional[int] = 1
@@ -465,7 +574,12 @@ class SparseRetrieval(RetrievalBasic):
             doc_indices = sorted_result.tolist()[:k]
 
             return doc_score, doc_indices
-        
+
+        elif self.embedding_form == "ES":
+            res = self.es.es.search(index = "document",q=query, size=k)
+            doc_score = [hit['_score'] for hit in res['hits']['hits']]
+            doc_indices = [hit['_id'] for hit in res['hits']['hits']]
+            return doc_score, doc_indices
 
     def get_relevant_doc_bulk(
         self, queries: List, k: Optional[int] = 1
@@ -511,6 +625,17 @@ class SparseRetrieval(RetrievalBasic):
                 doc_scores.append(result[i, :][sorted_result].tolist()[:k])
                 doc_indices.append(sorted_result.tolist()[:k])
             return doc_scores, doc_indices
+
+        elif self.embedding_form == "ES":
+            print("----- Start Calculate Elastic Search -----")
+            doc_score = []
+            doc_indices = []
+            for query in tqdm(queries):
+                res = self.es.es.search(index = "document",q=query, size=k)
+                doc_score.append([hit['_score'] for hit in res['hits']['hits']])
+                doc_indices.append([int(hit['_id']) for hit in res['hits']['hits']])
+            print("----- Finish Calculate Elastic Search -----")
+            return doc_score, doc_indices
 
 
     def retrieve_faiss(
@@ -814,59 +939,106 @@ if __name__ == "__main__":
     )
     parser.add_argument("--use_faiss", default=False, type=bool, help="")
 
-    args = parser.parse_args()
+    args = parser.parse_args()    
 
-    # Test sparse
-    org_dataset = load_from_disk(args.dataset_name)
-    full_ds = concatenate_datasets(
-        [
-            org_dataset["train"].flatten_indices(),
-            org_dataset["validation"].flatten_indices(),
-        ]
-    )  # train dev 를 합친 4192 개 질문에 대해 모두 테스트
-    print("*" * 40, "query dataset", "*" * 40)
-    print(full_ds)
+    
+    config = BertConfig().from_pretrained('klue/bert-base')
 
-    from transformers import AutoTokenizer
+    tokenizer = AutoTokenizer.from_pretrained("klue/bert-base")
 
-    tokenizer = AutoTokenizer.from_pretrained(
-        args.model_name_or_path,
-        use_fast=False,
+    p_encoder = BertModel(config=config)
+    q_encoder = BertModel(config=config)
+    # p_encoder = AutoModel.from_pretrained("klue/bert-base")
+    # q_encoder = AutoModel.from_pretrained("klue/bert-base")
+
+    args = TrainingArguments(
+            output_dir="dense_retireval",
+            evaluation_strategy="epoch",
+            learning_rate=3e-4,
+            per_device_train_batch_size=16,
+            per_device_eval_batch_size=16,
+            num_train_epochs=20,
+            weight_decay=0.01
+        )
+
+    retriever = DenseRetrieval(
+        tokenize_fn=tokenizer,
+        args = args, 
+        p_encoder = p_encoder,
+        q_encoder = q_encoder
     )
+    train_dataset, eval_dataset = retriever.load_dataset(eval=True)
+    # retriever.prepare_in_batch_negative(num_neg = 2)
+    train_p_encoder, train_q_encoder = retriever.train(train_dataset=train_dataset,eval_dataset=eval_dataset,args=args)
+    p_embedding = retriever.get_embedding(p_encoder = train_p_encoder)
+    a,b = retriever.get_relevant_doc_bulk(p_embedding=p_embedding,q_encoder=train_q_encoder,topk=30)
+    
+    print("-"*10, "question", "-"*10)
+    print(retriever.test[0])
+    for i in b[0]:
+        print("-"*10, "test", str(i), "-"*10)
+        print(retriever.contexts[i])
 
-    retriever = SparseRetrieval(
-        tokenize_fn=tokenizer.tokenize,
-        data_path=args.data_path,
-        context_path=args.context_path,
-        embedding_form="BM25",
-    )
 
-    retriever.get_sparse_embedding()
 
-    query = "대통령을 포함한 미국의 행정부 견제권을 갖는 국가 기관은?"
+#  [56717  9418 18690 20298 40171]
+#  [37157 16361 56244 20579 56645]
+#  [33898 25937 30465 43045 46471]
+#  [29006 14121 46510 33594 28485]
+#  [10103 45921 23183  1467 43159]
+#  [54517 54329 56098 25904 52149]
+#  [39502 27050 27044 28639 35692]
+#  [38857 40171   590  7822 45952]
+#  [10115 14459 40350 21292 54885]
 
-    if args.use_faiss:
 
-        # test single query
-        with timer("single query by faiss"):
-            scores, indices = retriever.retrieve_faiss(query)
+    # # Test sparse
+    # org_dataset = load_from_disk(args.dataset_name)
+    # full_ds = concatenate_datasets(
+    #     [
+    #         org_dataset["train"].flatten_indices(),
+    #         org_dataset["validation"].flatten_indices(),
+    #     ]
+    # )  # train dev 를 합친 4192 개 질문에 대해 모두 테스트
+    # print("*" * 40, "query dataset", "*" * 40)
+    # print(full_ds)
 
-        # test bulk
-        with timer("bulk query by exhaustive search"):
-            df = retriever.retrieve_faiss(full_ds)
-            df["correct"] = df["original_context"] == df["context"]
+    # from transformers import AutoTokenizer
 
-            print("correct retrieval result by faiss", df["correct"].sum() / len(df))
+    # tokenizer = AutoTokenizer.from_pretrained(
+    #     args.model_name_or_path,
+    #     use_fast=False,
+    # )
 
-    else:
-        with timer("bulk query by exhaustive search"):
-            print("Start retirieve")
-            df = retriever.retrieve(full_ds)
-            df["correct"] = df["original_context"] == df["context"]
-            print(
-                "correct retrieval result by exhaustive search",
-                df["correct"].sum() / len(df),
-            )
+    # retriever = SparseRetrieval(
+    #     tokenize_fn=tokenizer.tokenize,
+    #     data_path=args.data_path,
+    #     context_path=args.context_path,
+    # )
 
-        with timer("single query by exhaustive search"):
-            scores, indices = retriever.retrieve(query)
+    # query = "대통령을 포함한 미국의 행정부 견제권을 갖는 국가 기관은?"
+
+    # if args.use_faiss:
+
+    #     # test single query
+    #     with timer("single query by faiss"):
+    #         scores, indices = retriever.retrieve_faiss(query)
+
+    #     # test bulk
+    #     with timer("bulk query by exhaustive search"):
+    #         df = retriever.retrieve_faiss(full_ds)
+    #         df["correct"] = df["original_context"] == df["context"]
+
+    #         print("correct retrieval result by faiss", df["correct"].sum() / len(df))
+
+    # else:
+    #     with timer("bulk query by exhaustive search"):
+    #         df = retriever.retrieve(full_ds)
+    #         df["correct"] = df["original_context"] == df["context"]
+    #         print(
+    #             "correct retrieval result by exhaustive search",
+    #             df["correct"].sum() / len(df),
+    #         )
+
+    #     with timer("single query by exhaustive search"):
+    #         scores, indices = retriever.retrieve(query)

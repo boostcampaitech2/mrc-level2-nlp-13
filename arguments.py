@@ -2,6 +2,16 @@ from dataclasses import asdict, dataclass, field
 from typing import Any, Dict, List, Optional
 
 
+# monologg/koelectra-base-v3-finetuned-korquad 
+# epoch 3 - 0.473
+# sangrimlee/bert-base-multilingual-cased-korquad
+# epoch 3 - 0.266
+# hanmaroo/xlm_roberta_large_korquad_v2
+# klue/roberta-large
+# epoch 10 - 0.551
+# tunib/electra-ko-en-base
+# tunib/electra-ko-base
+
 @dataclass
 class ModelArguments:
     """
@@ -9,19 +19,19 @@ class ModelArguments:
     """
 
     model_name_or_path: str = field(
-        default="Huffon/sentence-klue-roberta-base",#klue/roberta-large",
+        default="tunib/electra-ko-base",
         metadata={
             "help": "Path to pretrained model or model identifier from huggingface.co/models"
         },
     )
     config_name: Optional[str] = field(
-        default="Huffon/sentence-klue-roberta-base",
+        default="tunib/electra-ko-base",
         metadata={
             "help": "Pretrained config name or path if not the same as model_name"
         },
     )
     tokenizer_name: Optional[str] = field(
-        default="Huffon/sentence-klue-roberta-base",
+        default="tunib/electra-ko-base",
         metadata={
             "help": "Pretrained tokenizer name or path if not the same as model_name"
         },
@@ -34,7 +44,7 @@ class DataTrainingArguments:
     """
 
     dataset_name: Optional[str] = field(
-        default="./data/train_dataset",
+        default="../data/train_dataset",
         metadata={"help": "The name of the dataset to use."},
     )
     overwrite_cache: bool = field(
@@ -46,7 +56,7 @@ class DataTrainingArguments:
         metadata={"help": "The number of processes to use for the preprocessing."},
     )
     max_seq_length: int = field(
-        default=512,
+        default=384,
         metadata={
             "help": "The maximum total input sequence length after tokenization. Sequences longer "
             "than this will be truncated, sequences shorter will be padded."
@@ -78,7 +88,7 @@ class DataTrainingArguments:
         metadata={"help": "Whether to run passage retrieval using sparse embedding."},
     )
     kind_of_retrieval: str = field(
-        default="Dense",  # SparseDense
+        default="Sparse",  # SparseDense
         metadata={"help": "Kind of retrieval."},
     )
     num_clusters: int = field(
