@@ -88,7 +88,7 @@ class DataTrainingArguments:
         metadata={"help": "Whether to run passage retrieval using sparse embedding."},
     )
     kind_of_retrieval: str = field(
-        default="Dense",  # SparseDense
+        default="Sparse",  # SparseDense
         metadata={"help": "Kind of retrieval."},
     )
     num_clusters: int = field(

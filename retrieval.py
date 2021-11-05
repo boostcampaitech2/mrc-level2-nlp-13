@@ -367,6 +367,8 @@ class ElasticSearch():
 
         if buffer:
             helpers.bulk(self.es, buffer)
+    def get_elasticsearch(self):
+        return self.es
 
 class SparseRetrieval(RetrievalBasic):
     def __init__(
@@ -573,7 +575,7 @@ class SparseRetrieval(RetrievalBasic):
             return doc_score, doc_indices
 
         elif self.embedding_form == "ES":
-            res = self.es.search(index = "document",q=query, size=k)
+            res = self.es.es.search(index = "document",q=query, size=k)
             doc_score = [hit['_score'] for hit in res['hits']['hits']]
             doc_indices = [hit['_id'] for hit in res['hits']['hits']]
             return doc_score, doc_indices
@@ -628,7 +630,7 @@ class SparseRetrieval(RetrievalBasic):
             doc_score = []
             doc_indices = []
             for query in tqdm(queries):
-                res = self.es.search(index = "document",q=query, size=k)
+                res = self.es.es.search(index = "document",q=query, size=k)
                 doc_score.append([hit['_score'] for hit in res['hits']['hits']])
                 doc_indices.append([int(hit['_id']) for hit in res['hits']['hits']])
             print("----- Finish Calculate Elastic Search -----")
