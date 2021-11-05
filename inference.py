@@ -118,6 +118,7 @@ def main():
             datasets = run_dense_retrieval(
                 datasets,
                 training_args,
+                data_args,
                 dense_args,
             )
         elif data_args.kind_of_retrieval == "Joint":
@@ -125,6 +126,7 @@ def main():
                 tokenizer.tokenize,
                 datasets,
                 training_args,
+                data_args,
                 dense_args,
             )
 
@@ -137,6 +139,7 @@ def run_joint_retrieval(
     datasets: DatasetDict,
     training_args: TrainingArguments,
     dense_args: DenseTrainingArguments,
+    data_args: DataTrainingArguments,
     data_path: str = "../data",
     context_path: str = "wikipedia_documents.json",
     embedding_form : Optional[str] = "BM25"
@@ -157,7 +160,7 @@ def run_joint_retrieval(
         embedding_form = embedding_form
     )
 
-    df = retriever.retrieve(datasets["validation"], topk=dense_args.top_k_retrieval)
+    df = retriever.retrieve(datasets["validation"], topk=data_args.top_k_retrieval)
 
     # test data 에 대해선 정답이 없으므로 id question context 로만 데이터셋이 구성됩니다.
     if training_args.do_predict:
@@ -250,6 +253,7 @@ def run_sparse_retrieval(
 def run_dense_retrieval(
     datasets: DatasetDict,
     training_args: TrainingArguments,
+    data_args: DataTrainingArguments,
     dense_args: DenseTrainingArguments,
     data_path: str = "./data",
     context_path: str = "wikipedia_documents.json",
@@ -270,7 +274,7 @@ def run_dense_retrieval(
     del p_encoder # 메모리 확보
     
     ## 3. 각 쿼리 임베딩에 따른 passage 구하기
-    df = retriever.retrieve(q_encoder, datasets["validation"], topk=dense_args.top_k_retrieval)
+    df = retriever.retrieve(q_encoder, datasets["validation"], topk=data_args.top_k_retrieval)
 
     ## 4. 반환하기
     # test data 에 대해선 정답이 없으므로 id question context 로만 데이터셋이 구성됩니다.
