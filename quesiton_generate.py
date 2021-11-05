@@ -1,30 +1,49 @@
-import os
+import os, sys, getopt
 import json
 import pandas as pd
+import random
 from tqdm import tqdm
 from pororo import Pororo
 from arguments import QuestionGenerationArguments
 from transformers import HfArgumentParser
 import torch
 
-def main():
-    # parser = HfArgumentParser(QuestionGenerationArguments)
-    # # qg_parser = parser.parse_args_into_dataclasses()
-    # data_path = parser.data_path
-    # context_path = parser.context_path
+def create_additional_datasets(mode):
+    """
+        Create additional dataset with wikipedia data
+        Arguments:
+            mode:
+                (default): with title
+                'ner': with ner
+        Return:
+            None
+    """
     os.environ["TOKENIZERS_PARALLELISM"] = "true"
     data_path  = "../data/"
     context_path =  "wikipedia_documents.json"
+
     with open(os.path.join(data_path, context_path), "r", encoding="utf-8") as f:
         wiki = json.load(f)
 
     wiki_df = pd.DataFrame.from_dict(wiki, orient='index')
     wiki_df['document_id'] = 'wiki-'+ wiki_df['document_id'].astype("string")
 
-    answers = list(wiki_df['title'])
     contexts = list(wiki_df['text'])
     doc_id = list(wiki_df['document_id'])
 
+    if mode == 'ner':
+        ner = Pororo(task="ner", lang="ko")
+        answers = []
+        for context in contexts:
+            try:
+                tagged_ner = ner(context)
+                tagged_ner = [(word, entity) for word, entity in tagged_ner if entity != 'O']
+                answer = random.choice(tagged_ner)[0]
+                answers.append(answer)
+            except:
+                answers.append('')
+    else:
+        answers = list(wiki_df['title'])
 
     full_length = wiki_df.shape[0] 
     batch_size = 128
@@ -79,8 +98,30 @@ def main():
 
     wiki_qg_df.append(value_dic, ignore_index=True)
     wiki_qg_df.to_csv('./wiki_qg.csv',index=False)
-    
 
+def main(argv):
+    file_name = argv[0] # 실행시키는 파일명
+    run_mode = "title"  # running mode title(default) / ner
+  
+    try:
+        print(argv[1:])
+        opts, etc_args = getopt.getopt(argv[1:], "hc:", ["help", "mode="])
+    except getopt.GetoptError:
+        print(file_name, "-c <mode>")
+        sys.exit(2)
+
+    for opt, arg in opts:
+        if opt in ("-h", "--help"):
+            print(file_name, "-m <mode>")
+            sys.exit(0)
+        elif opt in ("-m", "--mode"):
+            run_mode = arg
+
+    if run_mode not in ['title', 'ner']:
+        raise Exception('not expected args...')
+    
+    print(f"generate question with {run_mode}")
+    create_additional_datasets(run_mode)
 
 if __name__ == "__main__":
-    main()
+    main(sys.argv)
