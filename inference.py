@@ -125,7 +125,7 @@ def main():
                 tokenizer.tokenize,
                 datasets,
                 training_args,
-                data_args,
+                dense_args,
             )
 
     # eval or predict mrc model
@@ -136,7 +136,7 @@ def run_joint_retrieval(
     tokenize_fn: Callable[[str], List[str]],
     datasets: DatasetDict,
     training_args: TrainingArguments,
-    data_args: DataTrainingArguments,
+    dense_args: DenseTrainingArguments,
     data_path: str = "../data",
     context_path: str = "wikipedia_documents.json",
     embedding_form : Optional[str] = "BM25"
@@ -145,8 +145,8 @@ def run_joint_retrieval(
     p_tokenizer = AutoTokenizer.from_pretrained('klue/roberta-small')
     q_tokenizer = AutoTokenizer.from_pretrained('klue/roberta-small')
     
-    p_encoder = RobertaModel.from_pretrained(data_args.dense_passage_retrieval_name).to('cuda')
-    q_encoder = RobertaModel.from_pretrained(data_args.dense_passage_retrieval_name).to('cuda')
+    p_encoder = RobertaModel.from_pretrained(dense_args.dense_passage_retrieval_name).to('cuda')
+    q_encoder = RobertaModel.from_pretrained(dense_args.dense_question_retrieval_name).to('cuda')
     
     retriever = JointRetrieval(
         sparse_tokenize_fn = tokenize_fn,
@@ -157,7 +157,7 @@ def run_joint_retrieval(
         embedding_form = embedding_form
     )
 
-    df = retriever.retrieve(datasets["validation"], topk=data_args.top_k_retrieval)
+    df = retriever.retrieve(datasets["validation"], topk=dense_args.top_k_retrieval)
 
     # test data 에 대해선 정답이 없으므로 id question context 로만 데이터셋이 구성됩니다.
     if training_args.do_predict:
