@@ -22,7 +22,7 @@ from transformers import (
     set_seed,
 )
 
-from Custom import MyRobertaForQuestionAnswering
+from cnn_header import MyRobertaForQuestionAnswering
 from tokenizers import Tokenizer
 from tokenizers.models import WordPiece
 

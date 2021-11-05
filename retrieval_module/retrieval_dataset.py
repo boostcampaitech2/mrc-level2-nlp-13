@@ -38,10 +38,16 @@ class RetrievalTrainDataset(Dataset):
 
 class RetrievalValidDataset(Dataset):
     def __init__(self, input_ids, attention_mask):
+<<<<<<< HEAD
         self.device = "cuda:0" if torch.cuda.is_available() else "cpu"
         self.input_ids = input_ids.to(self.device)
         self.attention_mask = attention_mask.to(self.device)
 
+=======
+        self.input_ids = input_ids
+        self.attention_mask = attention_mask
+        
+>>>>>>> c19b833057cc4be053e1fe61b4bdd93e6a27b85d
     def __getitem__(self, idx):
         item = {
             "input_ids": self.input_ids[idx],
@@ -52,6 +58,7 @@ class RetrievalValidDataset(Dataset):
     def __len__(self):
         return len(self.input_ids)
 
+<<<<<<< HEAD
 
 class RobertaEncoder(nn.Module):
     def __init__(self, model_name) -> None:
@@ -69,8 +76,11 @@ class RobertaEncoder(nn.Module):
 
 
 class BertEncoder(RobertaPreTrainedModel):
+=======
+class RoBertaEncoder(RobertaPreTrainedModel):
+>>>>>>> c19b833057cc4be053e1fe61b4bdd93e6a27b85d
     def __init__(self, config):
-        super(BertEncoder, self).__init__(config)
+        super(RoBertaEncoder, self).__init__(config)
 
         self.bert = RobertaModel(config)
         # self.init_weights()
