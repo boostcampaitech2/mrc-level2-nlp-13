@@ -131,7 +131,8 @@ class DenseRetrieval(RetrievalBasic):
         """
         self.p_tokenizer = tokenizers[0]
         self.q_tokenizer = tokenizers[1]
-        self.p_encoder = encoders
+        self.p_encoder = encoders[0]
+        self.q_encoder = encoders[1]
         self.passage_embedding_vectors = []
 
     def get_dense_passage_embedding(self) -> NoReturn:
@@ -756,6 +757,167 @@ class SparseRetrieval(RetrievalBasic):
 
         return D.tolist(), I.tolist()
 
+
+class JointRetrieval(RetrievalBasic):
+    def __init__(
+        self,
+        sparse_tokenize_fn,
+        dense_tokenizer,
+        encoders,
+        data_path: Optional[str] = "../data/",
+        context_path: Optional[str] = "wikipedia_documents.json",
+        embedding_form : Optional[str] = "BM25"
+    ) -> NoReturn:
+        
+        """
+        Arguments:
+            tokenize_fn:
+                기본 text를 tokenize해주는 함수입니다.
+                아래와 같은 함수들을 사용할 수 있습니다.
+                - lambda x: x.split(' ')
+                - Huggingface Tokenizer
+                - konlpy.tag의 Mecab
+
+            data_path:
+                데이터가 보관되어 있는 경로입니다.
+
+            context_path:
+                Passage들이 묶여있는 파일명입니다.
+
+            data_path/context_path가 존재해야합니다.
+
+        Summary:
+            Passage 파일을 불러오고 TfidfVectorizer를 선언하는 기능을 합니다.
+        """
+        # Set Basic variables
+        super().__init__(sparse_tokenize_fn, data_path, context_path)
+
+        self.sparse = SparseRetrieval(
+            sparse_tokenize_fn,
+            data_path,
+            context_path,
+            embedding_form
+        )
+
+        self.dense = DenseRetrieval(
+            dense_tokenizer,
+            encoders,
+            data_path,
+            context_path
+        )
+
+        self.sparse.get_sparse_embedding()
+        self.dense.get_dense_passage_embedding()
+
+
+    def retrieve(
+        self, query_or_dataset: Union[str, Dataset], topk: Optional[int] = 1
+    ) -> Union[Tuple[List, List], pd.DataFrame]:
+
+        """
+        Arguments:
+            query_or_dataset (Union[str, Dataset]):
+                str이나 Dataset으로 이루어진 Query를 받습니다.
+                str 형태인 하나의 query만 받으면 `get_relevant_doc`을 통해 유사도를 구합니다.
+                Dataset 형태는 query를 포함한 HF.Dataset을 받습니다.
+                이 경우 `get_relevant_doc_bulk`를 통해 유사도를 구합니다.
+            topk (Optional[int], optional): Defaults to 1.
+                상위 몇 개의 passage를 사용할 것인지 지정합니다.
+
+        Returns:
+            1개의 Query를 받는 경우  -> Tuple(List, List)
+            다수의 Query를 받는 경우 -> pd.DataFrame: [description]
+
+        Note:
+            다수의 Query를 받는 경우,
+                Ground Truth가 있는 Query (train/valid) -> 기존 Ground Truth Passage를 같이 반환합니다.
+                Ground Truth가 없는 Query (test) -> Retrieval한 Passage만 반환합니다.
+        """
+    
+        if isinstance(query_or_dataset, str):
+            doc_scores, doc_indices = self.get_relevant_doc(query_or_dataset, k=topk)
+            print("[Search query]\n", query_or_dataset, "\n")
+
+            for i in range(topk):
+                print(f"Top-{i+1} passage with score {doc_scores[i]:4f}")
+                print(self.contexts[doc_indices[i]])
+
+            return (doc_scores, [self.contexts[doc_indices[i]] for i in range(topk)])
+
+        elif isinstance(query_or_dataset, Dataset):
+
+            # Retrieve한 Passage를 pd.DataFrame으로 반환합니다.
+            total = []
+            with timer("query exhaustive search"):
+                doc_scores, doc_indices = self.get_relevant_doc_bulk(
+                    query_or_dataset["question"], bm_k=300, dense_k=100
+                )
+            for idx, example in enumerate(
+                tqdm(query_or_dataset, desc="Sparse retrieval: ")
+            ):
+                tmp = {
+                    # Query와 해당 id를 반환합니다.
+                    "question": example["question"],
+                    "id": example["id"],
+                    # Retrieve한 Passage의 id, context를 반환합니다.
+                    "context_id": doc_indices[idx],
+                    "context": " ".join(
+                        [self.contexts[pid] for pid in doc_indices[idx]]
+                    ),
+                }
+                if "context" in example.keys() and "answers" in example.keys():
+                    # validation 데이터를 사용하면 ground_truth context와 answer도 반환합니다.
+                    tmp["original_context"] = example["context"]
+                    tmp["answers"] = example["answers"]
+                total.append(tmp)
+
+            cqas = pd.DataFrame(total)
+            return cqas
+
+    def get_relevant_doc_bulk(
+        self, queries: List, bm_k: Optional[int] = 1, dense_k: Optional[int] = 1,
+    ) -> Tuple[List, List]:
+
+        """
+        Arguments:
+            queries (List):
+                하나의 Query를 받습니다.
+            k (Optional[int]): 1
+                상위 몇 개의 Passage를 반환할지 정합니다.
+        Note:
+            vocab 에 없는 이상한 단어로 query 하는 경우 assertion 발생 (예) 뙣뙇?
+        """
+        
+
+        _, doc_indices = self.sparse.get_relevant_doc_bulk(queries, bm_k)
+
+        dense_tokenized_queries = self.dense.q_tokenizer(
+            queries, 
+            max_length=80, 
+            padding="max_length", 
+            truncation=True, 
+            return_tensors='pt'
+        ).to('cuda')
+
+        passage_embedding_vectors = np.array(self.dense.passage_embedding_vectors)
+        print(type(passage_embedding_vectors))
+        q_dataset = RetrievalValidDataset(input_ids=dense_tokenized_queries['input_ids'], attention_mask=dense_tokenized_queries['attention_mask'])
+        q_loader = DataLoader(q_dataset, batch_size=1)
+
+        dense_doc_scores = []
+        dense_doc_indices = []
+        for item,indices in tqdm(zip(q_loader,doc_indices)):
+            q_embs = self.dense.q_encoder(input_ids = item['input_ids'].to('cuda:0'), attention_mask=item['attention_mask'].to('cuda:0')).pooler_output.to('cpu')
+
+            for q_emb in q_embs:
+                mapping_indices = np.array(indices)
+                dot_prod_scores = torch.matmul(q_emb, torch.transpose(torch.tensor(passage_embedding_vectors[indices]), 0, 1))
+                rank = torch.argsort(dot_prod_scores, dim=0, descending=True).squeeze()
+            
+                dense_doc_scores.append(dot_prod_scores[rank[:dense_k]].detach().cpu().numpy())
+                dense_doc_indices.append(mapping_indices[rank[:dense_k].detach().cpu().numpy()])
+
+        return dense_doc_scores, dense_doc_indices
 
 if __name__ == "__main__":
 

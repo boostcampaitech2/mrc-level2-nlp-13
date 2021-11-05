@@ -23,6 +23,9 @@ predictions/
 # 모델 결과
 models/
 outputs/
+encoders/
+ensemble_result/
+
 
 nohup.out
 
