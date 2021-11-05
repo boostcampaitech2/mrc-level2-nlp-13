@@ -7,7 +7,7 @@ Open-Domain Question Answering 을 수행하는 inference 코드 입니다.
 
 import logging
 import sys
-from typing import Callable, List, Dict, NoReturn, Tuple
+from typing import Callable, List, Dict, NoReturn, Tuple, Optional
 
 import numpy as np
 
@@ -34,7 +34,7 @@ from Custom import MyRobertaForQuestionAnswering
 
 from utils_qa import postprocess_qa_predictions, check_no_error
 from trainer_qa import QuestionAnsweringTrainer
-from retrieval import DenseRetrieval, SparseRetrieval
+from retrieval import DenseRetrieval, SparseRetrieval, JointRetrieval
 
 from arguments import (
     ModelArguments,
@@ -80,7 +80,8 @@ def main():
     config = AutoConfig.from_pretrained(
         model_args.config_name
         if model_args.config_name
-        else model_args.model_name_or_path,
+        else model_arg
+        s.model_name_or_path,
     )
     tokenizer = AutoTokenizer.from_pretrained(
         model_args.tokenizer_name
@@ -88,7 +89,7 @@ def main():
         else model_args.model_name_or_path,
         use_fast=True,
     )
-    
+
     model = MyRobertaForQuestionAnswering.from_pretrained(
         model_args.model_name_or_path,
         config=config,
@@ -96,8 +97,8 @@ def main():
 
     # model = AutoModelForQuestionAnswering.from_pretrained(
     #     model_args.model_name_or_path,
-    #     #from_tf=bool(".ckpt" in model_args.model_name_or_path),
-    #     #config=config,
+    #     from_tf=bool(".ckpt" in model_args.model_name_or_path),
+    #     config=config,
     # )
 
     # True일 경우 : run passage retrieval
@@ -128,9 +129,12 @@ def main():
         run_mrc(data_args, training_args, model_args, datasets, tokenizer, model)
 
 def run_joint_retrieval(
-    sparse_tokenize_fn,
-    data_path: Optional[str] = "../data/",
-    context_path: Optional[str] = "wikipedia_documents.json",
+    tokenize_fn: Callable[[str], List[str]],
+    datasets: DatasetDict,
+    training_args: TrainingArguments,
+    data_args: DataTrainingArguments,
+    data_path: str = "../data",
+    context_path: str = "wikipedia_documents.json",
     embedding_form : Optional[str] = "BM25"
 ) -> DatasetDict:
     
@@ -141,12 +145,12 @@ def run_joint_retrieval(
     q_encoder = RobertaModel.from_pretrained(data_args.dense_passage_retrieval_name).to('cuda')
     
     retriever = JointRetrieval(
-        sparse_tokenize_fn,
+        sparse_tokenize_fn = tokenize_fn,
         dense_tokenizer = (p_tokenizer, q_tokenizer),
         encoders = (p_encoder, q_encoder),
-        data_path,
-        context_path,
-        embedding_form
+        data_path = data_path,
+        context_path = context_path,
+        embedding_form = embedding_form
     )
 
     df = retriever.retrieve(datasets["validation"], topk=data_args.top_k_retrieval)
@@ -254,7 +258,7 @@ def run_dense_retrieval(
     p_encoder = RobertaModel.from_pretrained(data_args.dense_passage_retrieval_name).to('cuda')
     retriever = DenseRetrieval(
         tokenizers=(p_tokenizer, q_tokenizer), encoders= p_encoder, data_path=data_path, context_path=context_path
-
+    )
 
     ## 2. passage embeddings 구하기
     retriever.get_dense_passage_embedding()

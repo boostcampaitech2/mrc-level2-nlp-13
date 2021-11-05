@@ -665,7 +665,7 @@ class JointRetrieval(RetrievalBasic):
             Passage 파일을 불러오고 TfidfVectorizer를 선언하는 기능을 합니다.
         """
         # Set Basic variables
-        super().__init__(tokenize_fn, data_path, context_path)
+        super().__init__(sparse_tokenize_fn, data_path, context_path)
 
         self.sparse = SparseRetrieval(
             sparse_tokenize_fn,
@@ -681,8 +681,8 @@ class JointRetrieval(RetrievalBasic):
             context_path
         )
 
-        sparse.get_sparse_embedding()
-        dense.get_dense_passage_embedding()
+        self.sparse.get_sparse_embedding()
+        self.dense.get_dense_passage_embedding()
 
 
     def retrieve(
@@ -775,21 +775,22 @@ class JointRetrieval(RetrievalBasic):
         ).to('cuda')
 
         passage_embedding_vectors = np.array(self.dense.passage_embedding_vectors)
+        print(type(passage_embedding_vectors))
         q_dataset = RetrievalValidDataset(input_ids=dense_tokenized_queries['input_ids'], attention_mask=dense_tokenized_queries['attention_mask'])
         q_loader = DataLoader(q_dataset, batch_size=1)
 
         dense_doc_scores = []
         dense_doc_indices = []
         for item,indices in tqdm(zip(q_loader,doc_indices)):
-            q_embs = q_encoder(input_ids = item['input_ids'].to('cuda:0'), attention_mask=item['attention_mask'].to('cuda:0')).pooler_output.to('cpu')
+            q_embs = self.dense.q_encoder(input_ids = item['input_ids'].to('cuda:0'), attention_mask=item['attention_mask'].to('cuda:0')).pooler_output.to('cpu')
 
             for q_emb in q_embs:
                 mapping_indices = np.array(indices)
-                dot_prod_scores = torch.matmul(q_emb, torch.transpose(passage_embedding_vectors[indices], 0, 1))
+                dot_prod_scores = torch.matmul(q_emb, torch.transpose(torch.tensor(passage_embedding_vectors[indices]), 0, 1))
                 rank = torch.argsort(dot_prod_scores, dim=0, descending=True).squeeze()
             
                 dense_doc_scores.append(dot_prod_scores[rank[:dense_k]].detach().cpu().numpy())
-                dense_doc_indices.append(mapping_indices[rank[:dense_k]].detach().cpu().numpy())
+                dense_doc_indices.append(mapping_indices[rank[:dense_k].detach().cpu().numpy()])
 
         return dense_doc_scores, dense_doc_indices
 

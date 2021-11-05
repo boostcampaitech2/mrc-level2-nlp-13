@@ -9,19 +9,19 @@ class ModelArguments:
     """
 
     model_name_or_path: str = field(
-        default="klue/roberta-large",
+        default="monologg/koelectra-base-v3-finetuned-korquad",
         metadata={
             "help": "Path to pretrained model or model identifier from huggingface.co/models"
         },
     )
     config_name: Optional[str] = field(
-        default="klue/roberta-large",
+        default="monologg/koelectra-base-v3-finetuned-korquad",
         metadata={
             "help": "Pretrained config name or path if not the same as model_name"
         },
     )
     tokenizer_name: Optional[str] = field(
-        default="monologg/koelectra-base-v3-discriminator",
+        default="monologg/koelectra-base-v3-finetuned-korquad",
         metadata={
             "help": "Pretrained tokenizer name or path if not the same as model_name"
         },
@@ -46,7 +46,7 @@ class DataTrainingArguments:
         metadata={"help": "The number of processes to use for the preprocessing."},
     )
     max_seq_length: int = field(
-        default=450,
+        default=384,
         metadata={
             "help": "The maximum total input sequence length after tokenization. Sequences longer "
             "than this will be truncated, sequences shorter will be padded."
@@ -100,20 +100,20 @@ class DataTrainingArguments:
 
     # For Dense retrieval
     dense_base_model: str = field(
-        default="klue/roberta-small",
+        default="Huffon/sentence-klue-roberta-base",
         metadata={
             "help": "Path to pretrained model or model identifier from huggingface.co/models"
         },
     )
     dense_passage_retrieval_name: str = field(
-        default="./encoders/p_encoder",
+        default="./encoders/sentence_bert/p_encoder",
         metadata={
             "help": "Path to pretrained model"
         },
 
     )
     dense_question_retrieval_name: str = field(
-        default="./encoders/p_encoder",
+        default="./encoders/sentence_bert/q_encoder",
         metadata={
             "help": "Path to pretrained model"
         },
