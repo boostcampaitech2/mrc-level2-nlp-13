@@ -9,19 +9,19 @@ class ModelArguments:
     """
 
     model_name_or_path: str = field(
-        default="klue/roberta-large",
+        default="Huffon/sentence-klue-roberta-base",#klue/roberta-large",
         metadata={
             "help": "Path to pretrained model or model identifier from huggingface.co/models"
         },
     )
     config_name: Optional[str] = field(
-        default="klue/roberta-large",
+        default="Huffon/sentence-klue-roberta-base",
         metadata={
             "help": "Pretrained config name or path if not the same as model_name"
         },
     )
     tokenizer_name: Optional[str] = field(
-        default="monologg/koelectra-base-v3-discriminator",
+        default="Huffon/sentence-klue-roberta-base",
         metadata={
             "help": "Pretrained tokenizer name or path if not the same as model_name"
         },
@@ -46,7 +46,7 @@ class DataTrainingArguments:
         metadata={"help": "The number of processes to use for the preprocessing."},
     )
     max_seq_length: int = field(
-        default=450,
+        default=512,
         metadata={
             "help": "The maximum total input sequence length after tokenization. Sequences longer "
             "than this will be truncated, sequences shorter will be padded."
@@ -78,7 +78,7 @@ class DataTrainingArguments:
         metadata={"help": "Whether to run passage retrieval using sparse embedding."},
     )
     kind_of_retrieval: str = field(
-        default="Sparse",  # SparseDense
+        default="Dense",  # SparseDense
         metadata={"help": "Kind of retrieval."},
     )
     num_clusters: int = field(
@@ -94,32 +94,47 @@ class DataTrainingArguments:
         default=False, metadata={"help": "Whether to build with faiss"}
     )
     use_validation_data: bool = field(
-        default=True,
+        default=False,
         metadata={"help": "Whether to train with validation set"},
     )
 
-    # For Dense retrieval
+class DenseTrainingArguments:
+    """
+    Arguments for training dense retrieval
+    """
+    data_path: str = field(
+        default="./data/train_dataset",
+        metadata={
+            "help": "Train data path"
+        },
+    )
     dense_base_model: str = field(
-        default="klue/roberta-small",
+        default="Huffon/sentence-klue-roberta-base",
         metadata={
             "help": "Path to pretrained model or model identifier from huggingface.co/models"
         },
     )
+    dense_mode: str = field(
+        default="single", #double
+        metadata={
+            "help": "single: share weight between p_encoder, q_encoder / double: not share"
+        },
+    )
     dense_passage_retrieval_name: str = field(
-        default="./models_result/roberta_small_dense_retireval_v3/27ep/p_encoder",
+        default="./models_result/sentence_bert_basic/p_encoder",
         metadata={
             "help": "Path to pretrained model"
         },
 
     )
     dense_question_retrieval_name: str = field(
-        default="./models_result/roberta_small_dense_retireval_v3/27ep/q_encoder",
+        default="./models_result/sentence_bert_basic/q_encoder",
         metadata={
             "help": "Path to pretrained model"
         },
     )
     dense_train_epoch: int = field(
-        default=30,
+        default=10,
         metadata={
             "help": "Epochs"
         },
@@ -136,16 +151,34 @@ class DataTrainingArguments:
             "help": "learning_rate for training"
         },
     )
-    dense_max_length: int = field(
-        default=500,
+    dense_context_max_length: int = field(
+        default=512,
+        metadata={
+            "help": "batch size for train DataLoader"
+        },
+    )
+    dense_question_max_length: int = field(
+        default=512,
         metadata={
             "help": "batch size for train DataLoader"
         },
     )
     dense_train_output_dir: str = field(
-        default="./models_result/roberta_small_dense_retireval_v3/",
+        default="./models_result/roberta_small_dense_retireval_v4/",
         metadata={
             "help": "save directory"
+        },
+    )
+    use_wiki_data: bool = field(
+        default=True,
+        metadata={
+            "help": "Whether to use wiki data or not."
+        },
+    )
+    wiki_data_path: str = field(
+        default="./opt/ml/git/mrc-level2-nlp-13/data/wiki",
+        metadata={
+            "help": "Wiki data path"
         },
     )
     
@@ -166,13 +199,13 @@ class CustomArguments:
         metadata={"help": "Your project name in WandB E.g. LKH, Readers, ..."},
     )
     wandb_run_name: str = field(
-        default="Roberta-large_v0.5",
+        default="roberta-cnn-512_v0.1",
         metadata={
             "help": "run name in WandB E.g. Bart_v0.1, Roberta_v0.1, DPR_Bert_v0.1"
         },
     )
     description: str = field(
-        default="Roberta-large epoch 10 + cnn head",
+        default="강민님이 만든 데이터 영끌",
         metadata={"help": "Explain your specific experiments settings"},
     )
 
@@ -186,15 +219,15 @@ class CustomArguments:
         metadata={"help": "Training learning rate"},
     )
     train_batch_size: int = field(
-        default=16,
+        default=8,
         metadata={"help": "Training batch size"},
     )
     valid_batch_size: int = field(
-        default=16,
+        default=8,
         metadata={"help": "Validation batch size"},
     )
     accumulation_step: int = field(
-        default=10,
+        default=8,
         metadata={"help": "Training accumulation step"},
     )
     sample_logging_step: int = field(
