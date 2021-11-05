@@ -40,6 +40,7 @@ from retrieval import DenseRetrieval, SparseRetrieval, JointRetrieval
 from arguments import (
     ModelArguments,
     DataTrainingArguments,
+    DenseTrainingArguments
 )
 
 
@@ -51,9 +52,9 @@ def main():
     # --help flag 를 실행시켜서 확인할 수 도 있습니다.
 
     parser = HfArgumentParser(
-        (ModelArguments, DataTrainingArguments, TrainingArguments)
+        (ModelArguments, DataTrainingArguments, DenseTrainingArguments, TrainingArguments)
     )
-    model_args, data_args, training_args = parser.parse_args_into_dataclasses()
+    model_args, data_args, dense_args, training_args = parser.parse_args_into_dataclasses()
 
     training_args.do_train = True
 
@@ -81,8 +82,7 @@ def main():
     config = AutoConfig.from_pretrained(
         model_args.config_name
         if model_args.config_name
-        else model_arg
-        s.model_name_or_path,
+        else model_args.model_name_or_path,
     )
     tokenizer = AutoTokenizer.from_pretrained(
         model_args.tokenizer_name
@@ -91,15 +91,15 @@ def main():
         use_fast=True,
     )
 
-    # model = MyRobertaForQuestionAnswering.from_pretrained(
-    #     model_args.model_name_or_path,
-    #     config=config,
-    # )
-
-    model = AutoModelForQuestionAnswering.from_pretrained(
+    model = MyRobertaForQuestionAnswering.from_pretrained(
         model_args.model_name_or_path,
         config=config,
     )
+
+    # model = AutoModelForQuestionAnswering.from_pretrained(
+    #     model_args.model_name_or_path,
+    #     config=config,
+    # )
 
     # model = MyRobertaForQuestionAnswering.from_config(config)
     # state_d = torch.load(model_args.model_name_or_path)
@@ -118,7 +118,7 @@ def main():
             datasets = run_dense_retrieval(
                 datasets,
                 training_args,
-                data_args,
+                dense_args,
             )
         elif data_args.kind_of_retrieval == "Joint":
             datasets = run_joint_retrieval(
@@ -250,7 +250,7 @@ def run_sparse_retrieval(
 def run_dense_retrieval(
     datasets: DatasetDict,
     training_args: TrainingArguments,
-    data_args: DataTrainingArguments,
+    dense_args: DenseTrainingArguments,
     data_path: str = "./data",
     context_path: str = "wikipedia_documents.json",
 ) -> DatasetDict:
@@ -259,18 +259,18 @@ def run_dense_retrieval(
     p_tokenizer = AutoTokenizer.from_pretrained('Huffon/sentence-klue-roberta-base')#'klue/roberta-small')
     q_tokenizer = AutoTokenizer.from_pretrained('Huffon/sentence-klue-roberta-base')#'klue/roberta-small')
     
-    p_encoder = RobertaModel.from_pretrained(data_args.dense_passage_retrieval_name).to('cuda')
+    p_encoder = RobertaModel.from_pretrained(dense_args.dense_passage_retrieval_name).to('cuda')
+    q_encoder = RobertaModel.from_pretrained(dense_args.dense_question_retrieval_name).to('cuda')
     retriever = DenseRetrieval(
-        tokenizers=(p_tokenizer, q_tokenizer), encoders= p_encoder, data_path=data_path, context_path=context_path)
+        tokenizers=(p_tokenizer, q_tokenizer), encoders= (p_encoder, q_encoder), data_path=data_path, context_path=context_path)
 
     ## 2. passage embeddings 구하기
     retriever.get_dense_passage_embedding()
     
     del p_encoder # 메모리 확보
     
-    q_encoder = RobertaModel.from_pretrained(data_args.dense_question_retrieval_name).to('cuda')
     ## 3. 각 쿼리 임베딩에 따른 passage 구하기
-    df = retriever.retrieve(q_encoder, datasets["validation"], topk=data_args.top_k_retrieval)
+    df = retriever.retrieve(q_encoder, datasets["validation"], topk=dense_args.top_k_retrieval)
 
     ## 4. 반환하기
     # test data 에 대해선 정답이 없으므로 id question context 로만 데이터셋이 구성됩니다.
