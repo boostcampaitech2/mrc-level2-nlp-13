@@ -67,15 +67,6 @@ def create_additional_datasets(mode):
             qg = Pororo(task="qg", lang="ko")
             questions= qg(batch_answers,batch_contexts)
 
-            if bn % 10 == 0:
-                print(batch_answers[:5])
-                print('*'*30)
-                print(batch_contexts[:5])
-                print('*'*30)
-                print(questions[:5])
-                print('*'*30)
-                print(len(value_dic['question']))
-
             value_dic['doc_id'].extend(batch_doc_id)
             value_dic['context'].extend(batch_contexts)
             value_dic['answer'].extend(batch_answers)
