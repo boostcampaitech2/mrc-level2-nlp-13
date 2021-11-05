@@ -77,9 +77,11 @@ def main():
     # 모델을 초기화하기 전에 난수를 고정합니다.
     set_seed(training_args.seed)
 
-    datasets = load_from_disk(data_args.dataset_name)
-    print(datasets)
+    #datasets = load_from_disk(data_args.dataset_name)
+    #print(datasets)
 
+    datasets = load_from_disk('./data/aug/')
+  
     # AutoConfig를 이용하여 pretrained model 과 tokenizer를 불러옵니다.
     # argument로 원하는 모델 이름을 설정하면 옵션을 바꿀 수 있습니다.
     config = AutoConfig.from_pretrained(
