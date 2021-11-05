@@ -21,7 +21,7 @@ from datasets import (
     DatasetDict,
 )
 
-from transformers import AutoConfig, AutoModelForQuestionAnswering, AutoTokenizer, RobertaModel
+from transformers import AutoConfig, AutoModelForQuestionAnswering, AutoTokenizer, RobertaModel, AutoConfig
 
 from transformers import (
     DataCollatorWithPadding,
@@ -32,6 +32,7 @@ from transformers import (
 )
 from Custom import MyRobertaForQuestionAnswering
 
+import torch
 from utils_qa import postprocess_qa_predictions, check_no_error
 from trainer_qa import QuestionAnsweringTrainer
 from retrieval import DenseRetrieval, SparseRetrieval
@@ -95,10 +96,13 @@ def main():
     #     config=config,
     # )
 
+    # model = MyRobertaForQuestionAnswering.from_config(config)
+    # state_d = torch.load(model_args.model_name_or_path)
+    # model.load_state_dict(state_d)
     model = AutoModelForQuestionAnswering.from_pretrained(
         model_args.model_name_or_path,
         #from_tf=bool(".ckpt" in model_args.model_name_or_path),
-        #config=config,
+        config=config,
     )
 
     # True일 경우 : run passage retrieval
@@ -136,7 +140,7 @@ def run_sparse_retrieval(
         tokenize_fn=tokenize_fn,
         data_path=data_path,
         context_path=context_path,
-        embedding_form="BM25",
+        embedding_form="TF-IDF",
     )
     retriever.get_sparse_embedding()
 
@@ -188,8 +192,8 @@ def run_dense_retrieval(
 ) -> DatasetDict:
     ## 1. p 인코더, q 인코더 불러오기
         # Query에 맞는 Passage들을 Retrieval 합니다.
-    p_tokenizer = AutoTokenizer.from_pretrained('klue/roberta-small')
-    q_tokenizer = AutoTokenizer.from_pretrained('klue/roberta-small')
+    p_tokenizer = AutoTokenizer.from_pretrained('Huffon/sentence-klue-roberta-base')#'klue/roberta-small')
+    q_tokenizer = AutoTokenizer.from_pretrained('Huffon/sentence-klue-roberta-base')#'klue/roberta-small')
     
     p_encoder = RobertaModel.from_pretrained(data_args.dense_passage_retrieval_name).to('cuda')
     retriever = DenseRetrieval(

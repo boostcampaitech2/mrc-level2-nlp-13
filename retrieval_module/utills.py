@@ -2,13 +2,13 @@ from typing import *
 import numpy as np
 from tqdm import tqdm
 
-import torch
-from torch.utils.data import DataLoader, ConcatDataset
+from torch.utils.data import DataLoader
 from datasets import load_from_disk
 
 from torch.utils.data import Dataset
-from retrieval_module.retrieval_dataset import RetrievalTrainDataset, RetrievalValidDataset
 from torch.utils.data import (DataLoader, RandomSampler, TensorDataset)
+from arguments import (
+    DenseTrainingArguments)
 
 def prepare_train_features_for_retriever(
     examples: Dataset, 
@@ -101,42 +101,37 @@ def prepare_train_features_for_retriever(
     return tokenized_examples
 
 def prepare_data(tokenizer, 
-            batch_size: int, 
-            dense_max_length: int):
+            dense_args: DenseTrainingArguments):
     '''
         Arguments:
             tokenizer 
                 context 및 qustion를 tokenizing 하기 위한 tokenizer
-            dense_max_length:
-                context를 tokenizing할 때, 사용할 최대 길이
-            batch_size:
-                retrieval를 학습할 때, 사용할 batch size
+            dense_args:
+                dense 학습 설정을 위한 arguments 들
         Returns:
             DataLoader(), List[List[str]], List[List[str]]
 
         Note:
             데이터를 로드하고, 토크나이징해 학습에 사용하기 위한 dataloader, list로 반환합니다.
     '''
-    datasets = load_from_disk('/opt/ml/git/mrc-level2-nlp-13/data/train_dataset/')
-    wiki_datasets = load_from_disk('/opt/ml/git/mrc-level2-nlp-13/data/wiki')
-    
-    print('data:', datasets)
-    print('wiki:',wiki_datasets)    
-
+    datasets = load_from_disk(dense_args.data_path)
     train_dataset = datasets["train"]
     valid_dataset = datasets["validation"]
 
-    #q_seqs = tokenizer(train_dataset['question'], max_length=80, padding="max_length", truncation=True, return_tensors='pt')
-    q_seqs = tokenizer(list(np.concatenate([datasets['train']['question'], wiki_datasets['question']], axis=0)), max_length=80, padding="max_length", truncation=True, return_tensors='pt')
-    #p_seqs = tokenizer(train_dataset['context'], max_length=dense_max_length, padding="max_length", truncation=True, return_tensors='pt')
-    p_seqs = tokenizer(list(np.concatenate([datasets['train']['context'], wiki_datasets['context']], axis=0)), max_length=dense_max_length, padding="max_length", truncation=True, return_tensors='pt')
+    if dense_args.use_wiki_data:
+        wiki_datasets = load_from_disk(dense_args.wiki_data_path)
+        q_seqs = tokenizer(list(np.concatenate([datasets['train']['question'], wiki_datasets['question']], axis=0)), max_length=dense_args.dense_question_max_length, padding="max_length", truncation=True, return_tensors='pt')
+        p_seqs = tokenizer(list(np.concatenate([datasets['train']['context'], wiki_datasets['context']], axis=0)), max_length=dense_args.dense_context_max_length, padding="max_length", truncation=True, return_tensors='pt')
+    else:
+        q_seqs = tokenizer(train_dataset['question'], max_length=dense_args.dense_question_max_length, padding="max_length", truncation=True, return_tensors='pt')
+        p_seqs = tokenizer(train_dataset['context'], max_length=dense_args.dense_context_max_length, padding="max_length", truncation=True, return_tensors='pt')
 
     # Train 데이터 준비
     train_dataset = TensorDataset(p_seqs['input_ids'], p_seqs['attention_mask'], p_seqs['token_type_ids'], 
                         q_seqs['input_ids'], q_seqs['attention_mask'], q_seqs['token_type_ids'])
     
     train_sampler = RandomSampler(train_dataset)
-    train_dataloader = DataLoader(train_dataset, sampler=train_sampler, batch_size=batch_size)
+    train_dataloader = DataLoader(train_dataset, sampler=train_sampler, batch_size=dense_args.dense_train_batch_size)
 
     # Valid 데이터 준비
     valid_corpus = list([example['context'] for example in valid_dataset])
