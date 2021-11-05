@@ -113,17 +113,17 @@ class CustomArguments:
         metadata={"help": "Your entity name in WandB E.g. clue or KyunghyunLim, ..."},
     )
     project_name: str = field(
-        default="mrc_test",
+        default="ensemble",
         metadata={"help": "Your project name in WandB E.g. LKH, Readers, ..."},
     )
     wandb_run_name: str = field(
-        default="Roberta-large_v0.5",
+        default="roberta-cnn",
         metadata={
             "help": "run name in WandB E.g. Bart_v0.1, Roberta_v0.1, DPR_Bert_v0.1"
         },
     )
     description: str = field(
-        default="Roberta-large epoch 10 + cnn head",
+        default="roberta-large epoch 3 + cnn head(sum)",
         metadata={"help": "Explain your specific experiments settings"},
     )
 

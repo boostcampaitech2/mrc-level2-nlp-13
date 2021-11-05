@@ -2,7 +2,7 @@
 # import modules #
 ##################
 
-from transformers import AutoConfig, AutoModelForSequenceClassification, RobertaModel
+from transformers import AutoConfig, AutoModelForSequenceClassification, BertModel
 from transformers.file_utils import (
     add_code_sample_docstrings,
     add_start_docstrings_to_model_forward,
@@ -13,6 +13,7 @@ from transformers.models.roberta.modeling_roberta import (
     _CONFIG_FOR_DOC,
     _TOKENIZER_FOR_DOC,
     ROBERTA_INPUTS_DOCSTRING,
+    RobertaModel,
     RobertaPreTrainedModel,
 )
 import torch

@@ -33,31 +33,33 @@ from tqdm.auto import tqdm
 
 
 # Integrations must be imported before ML frameworks:
-from transformers.integrations import (  # isort: split
-    default_hp_search_backend,
-    get_reporting_integration_callbacks,
+from transformers.integrations import (
     hp_params,
     is_fairscale_available,
-    is_optuna_available,
-    is_ray_tune_available,
-    is_sigopt_available,
-    run_hp_search_optuna,
-    run_hp_search_ray,
-    run_hp_search_sigopt,
 )
 
 import numpy as np
 import torch
 from packaging import version
 from torch import nn
-from torch.utils.data import DataLoader, Dataset, IterableDataset, RandomSampler, SequentialSampler
+from torch.utils.data import (
+    DataLoader,
+    Dataset,
+    IterableDataset,
+    RandomSampler,
+    SequentialSampler,
+)
 from torch.utils.data.distributed import DistributedSampler
 
 from huggingface_hub import Repository
 
 from transformers import __version__, Trainer
 from transformers.configuration_utils import PretrainedConfig
-from transformers.data.data_collator import DataCollator, DataCollatorWithPadding, default_data_collator
+from transformers.data.data_collator import (
+    DataCollator,
+    DataCollatorWithPadding,
+    default_data_collator,
+)
 from transformers.debug_utils import DebugOption, DebugUnderflowOverflow
 from transformers.deepspeed import deepspeed_init, is_deepspeed_zero3_enabled
 from transformers.dependency_versions_check import dep_version_check
@@ -74,7 +76,9 @@ from transformers.file_utils import (
 )
 from transformers.modelcard import TrainingSummary
 from transformers.modeling_utils import PreTrainedModel, unwrap_model
-from transformers.models.auto.modeling_auto import MODEL_FOR_QUESTION_ANSWERING_MAPPING_NAMES
+from transformers.models.auto.modeling_auto import (
+    MODEL_FOR_QUESTION_ANSWERING_MAPPING_NAMES,
+)
 from transformers.optimization import Adafactor, AdamW, get_scheduler
 from transformers.tokenization_utils_base import PreTrainedTokenizerBase
 from transformers.trainer_callback import (
@@ -168,14 +172,21 @@ if is_fairscale_available():
 
 if is_sagemaker_dp_enabled():
     import smdistributed.dataparallel.torch.distributed as dist
-    from smdistributed.dataparallel.torch.parallel.distributed import DistributedDataParallel as DDP
+    from smdistributed.dataparallel.torch.parallel.distributed import (
+        DistributedDataParallel as DDP,
+    )
 else:
     import torch.distributed as dist
 
 if is_sagemaker_mp_enabled():
     import smdistributed.modelparallel.torch as smp
 
-    from transformers.trainer_pt_utils import smp_forward_backward, smp_forward_only, smp_gather, smp_nested_concat
+    from transformers.trainer_pt_utils import (
+        smp_forward_backward,
+        smp_forward_only,
+        smp_gather,
+        smp_nested_concat,
+    )
 
 
 if TYPE_CHECKING:
@@ -193,12 +204,20 @@ SCALER_NAME = "scaler.pt"
 
 # Huggingface의 Trainer를 상속받아 QuestionAnswering을 위한 Trainer를 생성합니다.
 class QuestionAnsweringTrainer(Trainer):
-    def __init__(self, *args, custom_args, model_tokenizer=None, eval_examples=None, post_process_function=None, **kwargs):
+    def __init__(
+        self,
+        *args,
+        custom_args,
+        model_tokenizer=None,
+        eval_examples=None,
+        post_process_function=None,
+        **kwargs,
+    ):
         super().__init__(*args, **kwargs)
         self.eval_examples = eval_examples
         self.post_process_function = post_process_function
         if model_tokenizer == None:
-            assert("Please check your tokenizer")
+            assert "Please check your tokenizer"
         self.tokenizer = model_tokenizer
         self.custom_args = custom_args
 
@@ -226,7 +245,9 @@ class QuestionAnsweringTrainer(Trainer):
             kwargs:
                 Additional keyword arguments used to hide deprecated arguments
         """
-        resume_from_checkpoint = None if not resume_from_checkpoint else resume_from_checkpoint
+        resume_from_checkpoint = (
+            None if not resume_from_checkpoint else resume_from_checkpoint
+        )
 
         # memory metrics - must set up as early as possible
         self._memory_tracker.start()
@@ -248,7 +269,9 @@ class QuestionAnsweringTrainer(Trainer):
                 FutureWarning,
             )
         if len(kwargs) > 0:
-            raise TypeError(f"train() received got unexpected keyword arguments: {', '.join(list(kwargs.keys()))}.")
+            raise TypeError(
+                f"train() received got unexpected keyword arguments: {', '.join(list(kwargs.keys()))}."
+            )
         # This might change the seed so needs to run first.
         self._hp_search_setup(trial)
 
@@ -266,16 +289,22 @@ class QuestionAnsweringTrainer(Trainer):
         if isinstance(resume_from_checkpoint, bool) and resume_from_checkpoint:
             resume_from_checkpoint = get_last_checkpoint(args.output_dir)
             if resume_from_checkpoint is None:
-                raise ValueError(f"No valid checkpoint found in output directory ({args.output_dir})")
+                raise ValueError(
+                    f"No valid checkpoint found in output directory ({args.output_dir})"
+                )
 
         if resume_from_checkpoint is not None:
             if not os.path.isfile(os.path.join(resume_from_checkpoint, WEIGHTS_NAME)):
-                raise ValueError(f"Can't find a valid checkpoint at {resume_from_checkpoint}")
+                raise ValueError(
+                    f"Can't find a valid checkpoint at {resume_from_checkpoint}"
+                )
 
             logger.info(f"Loading model from {resume_from_checkpoint}).")
 
             if os.path.isfile(os.path.join(resume_from_checkpoint, CONFIG_NAME)):
-                config = PretrainedConfig.from_json_file(os.path.join(resume_from_checkpoint, CONFIG_NAME))
+                config = PretrainedConfig.from_json_file(
+                    os.path.join(resume_from_checkpoint, CONFIG_NAME)
+                )
                 checkpoint_version = config.transformers_version
                 if checkpoint_version is not None and checkpoint_version != __version__:
                     logger.warn(
@@ -289,7 +318,10 @@ class QuestionAnsweringTrainer(Trainer):
                 pass
             else:
                 # We load the model state dict on the CPU to avoid an OOM error.
-                state_dict = torch.load(os.path.join(resume_from_checkpoint, WEIGHTS_NAME), map_location="cpu")
+                state_dict = torch.load(
+                    os.path.join(resume_from_checkpoint, WEIGHTS_NAME),
+                    map_location="cpu",
+                )
                 # If the model is on the GPU, it still works!
                 self._load_state_dict_in_model(state_dict)
 
@@ -312,9 +344,13 @@ class QuestionAnsweringTrainer(Trainer):
         # number of training epochs: num_train_epochs
         # number of training steps per epoch: num_update_steps_per_epoch
         # total number of training steps to execute: max_steps
-        total_train_batch_size = args.train_batch_size * args.gradient_accumulation_steps * args.world_size
+        total_train_batch_size = (
+            args.train_batch_size * args.gradient_accumulation_steps * args.world_size
+        )
         if train_dataset_is_sized:
-            num_update_steps_per_epoch = len(train_dataloader) // args.gradient_accumulation_steps
+            num_update_steps_per_epoch = (
+                len(train_dataloader) // args.gradient_accumulation_steps
+            )
             num_update_steps_per_epoch = max(num_update_steps_per_epoch, 1)
             if args.max_steps > 0:
                 max_steps = args.max_steps
@@ -325,7 +361,9 @@ class QuestionAnsweringTrainer(Trainer):
                 # the best we can do.
                 num_train_samples = args.max_steps * total_train_batch_size
             else:
-                max_steps = math.ceil(args.num_train_epochs * num_update_steps_per_epoch)
+                max_steps = math.ceil(
+                    args.num_train_epochs * num_update_steps_per_epoch
+                )
                 num_train_epochs = math.ceil(args.num_train_epochs)
                 num_train_samples = len(self.train_dataset) * args.num_train_epochs
         else:
@@ -346,10 +384,14 @@ class QuestionAnsweringTrainer(Trainer):
             else:
                 debug_overflow = DebugUnderflowOverflow(self.model)  # noqa
 
-        delay_optimizer_creation = self.sharded_ddp is not None and self.sharded_ddp != ShardedDDPOption.SIMPLE
+        delay_optimizer_creation = (
+            self.sharded_ddp is not None and self.sharded_ddp != ShardedDDPOption.SIMPLE
+        )
         if args.deepspeed:
             deepspeed_engine, optimizer, lr_scheduler = deepspeed_init(
-                self, num_training_steps=max_steps, resume_from_checkpoint=resume_from_checkpoint
+                self,
+                num_training_steps=max_steps,
+                resume_from_checkpoint=resume_from_checkpoint,
             )
             self.model = deepspeed_engine.module
             self.model_wrapped = deepspeed_engine
@@ -384,15 +426,23 @@ class QuestionAnsweringTrainer(Trainer):
 
         # Train!
         num_examples = (
-            self.num_examples(train_dataloader) if train_dataset_is_sized else total_train_batch_size * args.max_steps
+            self.num_examples(train_dataloader)
+            if train_dataset_is_sized
+            else total_train_batch_size * args.max_steps
         )
 
         logger.info("***** Running training *****")
         logger.info(f"  Num examples = {num_examples}")
         logger.info(f"  Num Epochs = {num_train_epochs}")
-        logger.info(f"  Instantaneous batch size per device = {args.per_device_train_batch_size}")
-        logger.info(f"  Total train batch size (w. parallel, distributed & accumulation) = {total_train_batch_size}")
-        logger.info(f"  Gradient Accumulation steps = {args.gradient_accumulation_steps}")
+        logger.info(
+            f"  Instantaneous batch size per device = {args.per_device_train_batch_size}"
+        )
+        logger.info(
+            f"  Total train batch size (w. parallel, distributed & accumulation) = {total_train_batch_size}"
+        )
+        logger.info(
+            f"  Gradient Accumulation steps = {args.gradient_accumulation_steps}"
+        )
         logger.info(f"  Total optimization steps = {max_steps}")
 
         self.state.epoch = 0
@@ -405,17 +455,25 @@ class QuestionAnsweringTrainer(Trainer):
         if resume_from_checkpoint is not None and os.path.isfile(
             os.path.join(resume_from_checkpoint, TRAINER_STATE_NAME)
         ):
-            self.state = TrainerState.load_from_json(os.path.join(resume_from_checkpoint, TRAINER_STATE_NAME))
+            self.state = TrainerState.load_from_json(
+                os.path.join(resume_from_checkpoint, TRAINER_STATE_NAME)
+            )
             epochs_trained = self.state.global_step // num_update_steps_per_epoch
             if not args.ignore_data_skip:
-                steps_trained_in_current_epoch = self.state.global_step % (num_update_steps_per_epoch)
+                steps_trained_in_current_epoch = self.state.global_step % (
+                    num_update_steps_per_epoch
+                )
                 steps_trained_in_current_epoch *= args.gradient_accumulation_steps
             else:
                 steps_trained_in_current_epoch = 0
 
-            logger.info("  Continuing training from checkpoint, will skip to saved global_step")
+            logger.info(
+                "  Continuing training from checkpoint, will skip to saved global_step"
+            )
             logger.info(f"  Continuing training from epoch {epochs_trained}")
-            logger.info(f"  Continuing training from global step {self.state.global_step}")
+            logger.info(
+                f"  Continuing training from global step {self.state.global_step}"
+            )
             if not args.ignore_data_skip:
                 logger.info(
                     f"  Will skip the first {epochs_trained} epochs then the first {steps_trained_in_current_epoch} "
@@ -423,16 +481,24 @@ class QuestionAnsweringTrainer(Trainer):
                     "flag to your launch command, but you will resume the training on data already seen by your model."
                 )
                 if self.is_local_process_zero() and not args.disable_tqdm:
-                    steps_trained_progress_bar = tqdm(total=steps_trained_in_current_epoch)
-                    steps_trained_progress_bar.set_description("Skipping the first batches")
+                    steps_trained_progress_bar = tqdm(
+                        total=steps_trained_in_current_epoch
+                    )
+                    steps_trained_progress_bar.set_description(
+                        "Skipping the first batches"
+                    )
 
         # Update the references
         self.callback_handler.model = self.model
         self.callback_handler.optimizer = self.optimizer
         self.callback_handler.lr_scheduler = self.lr_scheduler
         self.callback_handler.train_dataloader = train_dataloader
-        self.state.trial_name = self.hp_name(trial) if self.hp_name is not None else None
-        self.state.trial_params = hp_params(trial.assignments) if trial is not None else None
+        self.state.trial_name = (
+            self.hp_name(trial) if self.hp_name is not None else None
+        )
+        self.state.trial_params = (
+            hp_params(trial.assignments) if trial is not None else None
+        )
         # This should be the same if the state has been saved but in case the training arguments changed, it's safer
         # to set this after the load.
         self.state.max_steps = max_steps
@@ -447,7 +513,9 @@ class QuestionAnsweringTrainer(Trainer):
         self._globalstep_last_logged = self.state.global_step
         model.zero_grad()
 
-        self.control = self.callback_handler.on_train_begin(args, self.state, self.control)
+        self.control = self.callback_handler.on_train_begin(
+            args, self.state, self.control
+        )
 
         # Skip the first epochs_trained epochs to get the random state of the dataloader at the right point.
         if not args.ignore_data_skip:
@@ -457,13 +525,17 @@ class QuestionAnsweringTrainer(Trainer):
                     break
 
         for epoch in range(epochs_trained, num_train_epochs):
-            if isinstance(train_dataloader, DataLoader) and isinstance(train_dataloader.sampler, DistributedSampler):
+            if isinstance(train_dataloader, DataLoader) and isinstance(
+                train_dataloader.sampler, DistributedSampler
+            ):
                 train_dataloader.sampler.set_epoch(epoch)
             elif isinstance(train_dataloader.dataset, IterableDatasetShard):
                 train_dataloader.dataset.set_epoch(epoch)
 
             if is_torch_tpu_available():
-                parallel_loader = pl.ParallelLoader(train_dataloader, [args.device]).per_device_loader(args.device)
+                parallel_loader = pl.ParallelLoader(
+                    train_dataloader, [args.device]
+                ).per_device_loader(args.device)
                 epoch_iterator = parallel_loader
             else:
                 epoch_iterator = train_dataloader
@@ -473,9 +545,13 @@ class QuestionAnsweringTrainer(Trainer):
                 self._past = None
 
             steps_in_epoch = (
-                len(epoch_iterator) if train_dataset_is_sized else args.max_steps * args.gradient_accumulation_steps
+                len(epoch_iterator)
+                if train_dataset_is_sized
+                else args.max_steps * args.gradient_accumulation_steps
             )
-            self.control = self.callback_handler.on_epoch_begin(args, self.state, self.control)
+            self.control = self.callback_handler.on_epoch_begin(
+                args, self.state, self.control
+            )
 
             for step, inputs in enumerate(epoch_iterator):
 
@@ -492,7 +568,9 @@ class QuestionAnsweringTrainer(Trainer):
                     steps_trained_progress_bar = None
 
                 if step % args.gradient_accumulation_steps == 0:
-                    self.control = self.callback_handler.on_step_begin(args, self.state, self.control)
+                    self.control = self.callback_handler.on_step_begin(
+                        args, self.state, self.control
+                    )
 
                 if (
                     ((step + 1) % args.gradient_accumulation_steps != 0)
@@ -505,46 +583,81 @@ class QuestionAnsweringTrainer(Trainer):
                 else:
                     tr_loss_step, output_step = self.training_step(model, inputs)
 
-                if args.logging_nan_inf_filter and (torch.isnan(tr_loss_step) or torch.isinf(tr_loss_step)):
+                if args.logging_nan_inf_filter and (
+                    torch.isnan(tr_loss_step) or torch.isinf(tr_loss_step)
+                ):
                     # if loss is nan or inf simply add the average of previous logged losses
-                    tr_loss += tr_loss / (1 + self.state.global_step - self._globalstep_last_logged)
+                    tr_loss += tr_loss / (
+                        1 + self.state.global_step - self._globalstep_last_logged
+                    )
                 else:
                     tr_loss += tr_loss_step
 
                 self.current_flos += float(self.floating_point_ops(inputs))
 
-                '''
+                """
                 Feat) Train 도중 학습 샘플 출력하기
                 #   training_step 반환 값 추가: output_step
                 #   compute_loss 반환 값 추가: output
                 #   compute_loss return_outputs = True로 변경
-                '''
+                """
                 if step % self.custom_args.sample_logging_step == 0:
-                    sample_size = output_step['start_logits'].size()[0]
-                    amount = self.custom_args.sample_logging_amount if sample_size > self.custom_args.sample_logging_amount else sample_size
-                    
-                    start_idxs = torch.argmax(output_step['start_logits'], dim=1).detach().cpu().numpy()
-                    end_idxs = torch.argmax(output_step['start_logits'], dim=1).detach().cpu().numpy()
-                    
-                    gt_start_idxs = inputs['start_positions'].detach().cpu().numpy()
-                    gt_end_idxs = inputs['end_positions'].detach().cpu().numpy()
+                    sample_size = output_step["start_logits"].size()[0]
+                    amount = (
+                        self.custom_args.sample_logging_amount
+                        if sample_size > self.custom_args.sample_logging_amount
+                        else sample_size
+                    )
 
-                    print('-'*100)
-                    print('Trained Samples')
-                    print('-'*100)
+                    start_idxs = (
+                        torch.argmax(output_step["start_logits"], dim=1)
+                        .detach()
+                        .cpu()
+                        .numpy()
+                    )
+                    end_idxs = (
+                        torch.argmax(output_step["start_logits"], dim=1)
+                        .detach()
+                        .cpu()
+                        .numpy()
+                    )
+
+                    gt_start_idxs = inputs["start_positions"].detach().cpu().numpy()
+                    gt_end_idxs = inputs["end_positions"].detach().cpu().numpy()
+
+                    print("-" * 100)
+                    print("Trained Samples")
+                    print("-" * 100)
                     question_contexts = []
                     predictions = []
                     ground_truthes = []
-                    for idx in range(amount):  
-                        question_context = self.tokenizer.decode(inputs['input_ids'][idx], skip_special_tokens=True)
-                        prediction = self.tokenizer.decode(inputs['input_ids'][idx][start_idxs[idx]:end_idxs[idx]+1], skip_special_tokens=True)
-                        ground_truth = self.tokenizer.decode(inputs['input_ids'][idx][gt_start_idxs[idx]:gt_end_idxs[idx]+1], skip_special_tokens=True)
+                    for idx in range(amount):
+                        question_context = self.tokenizer.decode(
+                            inputs["input_ids"][idx], skip_special_tokens=True
+                        )
+                        prediction = self.tokenizer.decode(
+                            inputs["input_ids"][idx][
+                                start_idxs[idx] : end_idxs[idx] + 1
+                            ],
+                            skip_special_tokens=True,
+                        )
+                        ground_truth = self.tokenizer.decode(
+                            inputs["input_ids"][idx][
+                                gt_start_idxs[idx] : gt_end_idxs[idx] + 1
+                            ],
+                            skip_special_tokens=True,
+                        )
                         logging_console(question_context, prediction, ground_truth)
                         question_contexts.append(question_context)
                         predictions.append(predictions)
                         ground_truthes.append(ground_truthes)
-                        print('-'*100)
-                    logging_csv_file(self.args.output_dir + "/train_samples.csv", question_contexts, predictions, ground_truthes)
+                        print("-" * 100)
+                    logging_csv_file(
+                        self.args.output_dir + "/train_samples.csv",
+                        question_contexts,
+                        predictions,
+                        ground_truthes,
+                    )
 
                 # Optimizer step for deepspeed must be called on every step regardless of the value of gradient_accumulation_steps
                 if self.deepspeed:
@@ -556,7 +669,11 @@ class QuestionAnsweringTrainer(Trainer):
                     and (step + 1) == steps_in_epoch
                 ):
                     # Gradient clipping
-                    if args.max_grad_norm is not None and args.max_grad_norm > 0 and not self.deepspeed:
+                    if (
+                        args.max_grad_norm is not None
+                        and args.max_grad_norm > 0
+                        and not self.deepspeed
+                    ):
                         # deepspeed does its own clipping
 
                         if self.use_amp:
@@ -572,7 +689,9 @@ class QuestionAnsweringTrainer(Trainer):
                         else:
                             # Revert to normal clipping otherwise, handling Apex or full precision
                             nn.utils.clip_grad_norm_(
-                                amp.master_params(self.optimizer) if self.use_apex else model.parameters(),
+                                amp.master_params(self.optimizer)
+                                if self.use_apex
+                                else model.parameters(),
                                 args.max_grad_norm,
                             )
 
@@ -597,17 +716,27 @@ class QuestionAnsweringTrainer(Trainer):
                     model.zero_grad()
                     self.state.global_step += 1
                     self.state.epoch = epoch + (step + 1) / steps_in_epoch
-                    self.control = self.callback_handler.on_step_end(args, self.state, self.control)
+                    self.control = self.callback_handler.on_step_end(
+                        args, self.state, self.control
+                    )
 
-                    self._maybe_log_save_evaluate(tr_loss, model, trial, epoch, ignore_keys_for_eval)
+                    self._maybe_log_save_evaluate(
+                        tr_loss, model, trial, epoch, ignore_keys_for_eval
+                    )
                 else:
-                    self.control = self.callback_handler.on_substep_end(args, self.state, self.control)
+                    self.control = self.callback_handler.on_substep_end(
+                        args, self.state, self.control
+                    )
 
                 if self.control.should_epoch_stop or self.control.should_training_stop:
                     break
 
-            self.control = self.callback_handler.on_epoch_end(args, self.state, self.control)
-            self._maybe_log_save_evaluate(tr_loss, model, trial, epoch, ignore_keys_for_eval)
+            self.control = self.callback_handler.on_epoch_end(
+                args, self.state, self.control
+            )
+            self._maybe_log_save_evaluate(
+                tr_loss, model, trial, epoch, ignore_keys_for_eval
+            )
 
             if DebugOption.TPU_METRICS_DEBUG in self.args.debug:
                 if is_torch_tpu_available():
@@ -625,7 +754,9 @@ class QuestionAnsweringTrainer(Trainer):
             # Clean the state at the end of training
             delattr(self, "_past")
 
-        logger.info("\n\nTraining completed. Do not forget to share your model on huggingface.co/models =)\n\n")
+        logger.info(
+            "\n\nTraining completed. Do not forget to share your model on huggingface.co/models =)\n\n"
+        )
         if args.load_best_model_at_end and self.state.best_model_checkpoint is not None:
             # Wait for everyone to get here so we are sur the model has been saved by process 0.
             if is_torch_tpu_available():
@@ -637,7 +768,9 @@ class QuestionAnsweringTrainer(Trainer):
                 f"Loading best model from {self.state.best_model_checkpoint} (score: {self.state.best_metric})."
             )
 
-            best_model_path = os.path.join(self.state.best_model_checkpoint, WEIGHTS_NAME)
+            best_model_path = os.path.join(
+                self.state.best_model_checkpoint, WEIGHTS_NAME
+            )
             if os.path.exists(best_model_path):
                 # We load the model state dict on the CPU to avoid an OOM error.
                 state_dict = torch.load(best_model_path, map_location="cpu")
@@ -651,14 +784,21 @@ class QuestionAnsweringTrainer(Trainer):
 
             if self.deepspeed:
                 self.deepspeed.load_checkpoint(
-                    self.state.best_model_checkpoint, load_optimizer_states=False, load_lr_scheduler_states=False
+                    self.state.best_model_checkpoint,
+                    load_optimizer_states=False,
+                    load_lr_scheduler_states=False,
                 )
 
         # add remaining tr_loss
         self._total_loss_scalar += tr_loss.item()
         train_loss = self._total_loss_scalar / self.state.global_step
 
-        metrics = speed_metrics("train", start_time, num_samples=num_train_samples, num_steps=self.state.max_steps)
+        metrics = speed_metrics(
+            "train",
+            start_time,
+            num_samples=num_train_samples,
+            num_steps=self.state.max_steps,
+        )
         self.store_flos()
         metrics["total_flos"] = self.state.total_flos
         metrics["train_loss"] = train_loss
@@ -669,11 +809,15 @@ class QuestionAnsweringTrainer(Trainer):
 
         self.log(metrics)
 
-        self.control = self.callback_handler.on_train_end(args, self.state, self.control)
+        self.control = self.callback_handler.on_train_end(
+            args, self.state, self.control
+        )
 
         return TrainOutput(self.state.global_step, train_loss, metrics)
 
-    def training_step(self, model: nn.Module, inputs: Dict[str, Union[torch.Tensor, Any]]) -> torch.Tensor:
+    def training_step(
+        self, model: nn.Module, inputs: Dict[str, Union[torch.Tensor, Any]]
+    ) -> torch.Tensor:
         """
         Perform a training step on a batch of inputs.
         Subclass and override to inject custom behavior.
@@ -772,28 +916,35 @@ class QuestionAnsweringTrainer(Trainer):
             )
             metrics = self.compute_metrics(eval_preds)
 
-            '''
+            """
             ##############################################################
             # Eval 중 샘플 출력
             ##############################################################
-            '''
-            print('-'*100)
-            print('validation samples')
-            print('-'*100)
+            """
+            print("-" * 100)
+            print("validation samples")
+            print("-" * 100)
             question_contexts = []
             predictions = []
             ground_truthes = []
             for idx in range(self.custom_args.sample_logging_amount):
-                question_context = eval_examples[idx]['question'] + ' ' + eval_examples[idx]['context']
-                prediction = eval_preds[0][idx]['prediction_text']
-                ground_truth = eval_preds[1][idx]['answers']['text'][0]
+                question_context = (
+                    eval_examples[idx]["question"] + " " + eval_examples[idx]["context"]
+                )
+                prediction = eval_preds[0][idx]["prediction_text"]
+                ground_truth = eval_preds[1][idx]["answers"]["text"][0]
                 logging_console(question_context, prediction, ground_truth)
                 question_contexts.append(question_context)
                 predictions.append(prediction)
                 ground_truthes.append(ground_truth)
-                print('-'*100)
-            logging_csv_file(self.args.output_dir+"/valid_samples.csv", question_contexts, predictions, ground_truthes)
-            
+                print("-" * 100)
+            logging_csv_file(
+                self.args.output_dir + "/valid_samples.csv",
+                question_contexts,
+                predictions,
+                ground_truthes,
+            )
+
             self.log(metrics)
         else:
             metrics = {}

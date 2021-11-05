@@ -135,7 +135,7 @@ def run_sparse_retrieval(
         tokenize_fn=tokenize_fn,
         data_path=data_path,
         context_path=context_path,
-        embedding_form="BM25",
+        embedding_form="ES",
     )
     retriever.get_sparse_embedding()
 
