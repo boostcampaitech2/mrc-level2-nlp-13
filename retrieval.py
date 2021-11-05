@@ -48,7 +48,7 @@ class RetrievalBasic:
     def __init__(
         self,
         tokenize_fn,
-        data_path: Optional[str] = "../data/",
+        data_path: Optional[str] = "./data/",
         context_path: Optional[str] = "wikipedia_documents.json",
     ) -> NoReturn:
 
@@ -72,7 +72,7 @@ class RetrievalBasic:
         self.indexer = None  # build_faiss()로 생성합니다.
 
 def make_elastic_data():
-    with open('../data/wikipedia_documents.json', 'r') as f:
+    with open('./data/wikipedia_documents.json', 'r') as f:
         wiki_data = pd.DataFrame(json.load(f)).transpose()
 
     wiki_data = wiki_data.drop_duplicates(['text']) # 3876
@@ -375,7 +375,7 @@ class SparseRetrieval(RetrievalBasic):
     def __init__(
         self,
         tokenize_fn,
-        data_path: Optional[str] = "../data/",
+        data_path: Optional[str] = "./data/",
         context_path: Optional[str] = "wikipedia_documents.json",
         embedding_form : Optional[str] = "TF-IDF"
     ) -> NoReturn:
@@ -764,7 +764,7 @@ class JointRetrieval(RetrievalBasic):
         sparse_tokenize_fn,
         dense_tokenizer,
         encoders,
-        data_path: Optional[str] = "../data/",
+        data_path: Optional[str] = "./data/",
         context_path: Optional[str] = "wikipedia_documents.json",
         embedding_form : Optional[str] = "BM25"
     ) -> NoReturn:
@@ -925,7 +925,7 @@ if __name__ == "__main__":
 
     parser = argparse.ArgumentParser(description="")
     parser.add_argument(
-        "--dataset_name", default="../data/train_dataset", type=str, help=""
+        "--dataset_name", default="./data/train_dataset", type=str, help=""
     )
     parser.add_argument(
         "--model_name_or_path",

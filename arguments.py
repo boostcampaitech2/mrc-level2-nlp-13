@@ -19,19 +19,19 @@ class ModelArguments:
     """
 
     model_name_or_path: str = field(
-        default="tunib/electra-ko-base",
+        default="models/roberta-cnn",
         metadata={
             "help": "Path to pretrained model or model identifier from huggingface.co/models"
         },
     )
     config_name: Optional[str] = field(
-        default="tunib/electra-ko-base",
+        default="models/roberta-cnn",
         metadata={
             "help": "Pretrained config name or path if not the same as model_name"
         },
     )
     tokenizer_name: Optional[str] = field(
-        default="tunib/electra-ko-base",
+        default="models/roberta-cnn",
         metadata={
             "help": "Pretrained tokenizer name or path if not the same as model_name"
         },
@@ -44,7 +44,7 @@ class DataTrainingArguments:
     """
 
     dataset_name: Optional[str] = field(
-        default="../data/train_dataset",
+        default="./data/train_dataset",
         metadata={"help": "The name of the dataset to use."},
     )
     overwrite_cache: bool = field(
@@ -88,7 +88,7 @@ class DataTrainingArguments:
         metadata={"help": "Whether to run passage retrieval using sparse embedding."},
     )
     kind_of_retrieval: str = field(
-        default="Sparse",  # SparseDense
+        default="Dense",  # SparseDense
         metadata={"help": "Kind of retrieval."},
     )
     num_clusters: int = field(
@@ -108,6 +108,7 @@ class DataTrainingArguments:
         metadata={"help": "Whether to train with validation set"},
     )
 
+@dataclass
 class DenseTrainingArguments:
     """
     Arguments for training dense retrieval
@@ -119,7 +120,7 @@ class DenseTrainingArguments:
         },
     )
     dense_base_model: str = field(
-        default="Huffon/sentence-klue-roberta-base",
+        default="klue/roberta-smll",
         metadata={
             "help": "Path to pretrained model or model identifier from huggingface.co/models"
         },
@@ -131,14 +132,14 @@ class DenseTrainingArguments:
         },
     )
     dense_passage_retrieval_name: str = field(
-        default="./models_result/sentence_bert_basic/p_encoder",
+        default="./models/best/p_encoder",
         metadata={
             "help": "Path to pretrained model"
         },
 
     )
     dense_question_retrieval_name: str = field(
-        default="./models_result/sentence_bert_basic/q_encoder",
+        default="./models/best/q_encoder",
         metadata={
             "help": "Path to pretrained model"
         },
@@ -162,13 +163,13 @@ class DenseTrainingArguments:
         },
     )
     dense_context_max_length: int = field(
-        default=512,
+        default=384,
         metadata={
             "help": "batch size for train DataLoader"
         },
     )
     dense_question_max_length: int = field(
-        default=512,
+        default=80,
         metadata={
             "help": "batch size for train DataLoader"
         },
