@@ -6,7 +6,7 @@
 
 ✋ KLUE MRC(Machine Reading Comprehension) Dataset으로 주어진 질문에 대한 문서 검색 후 답변 추출하는 Task.
 
-✋ Retriver 를 통해  wikipedia에서 Top-k 문서를 불러오고, Reader를 통해 문서 내 답변은 추출한다.
+✋ Retriver 를 통해  wikipedia에서 Top-k 문서를 불러오고, Reader를 통해 문서 내 답변을 추출하는 모델을 구축, 실험 하여 주어진 질문에 정확한 답변을 찾아내는 모델을 만드는 것.
 
 ✋ 1일 팀 제출횟수는 10회로 제한되었습니다.
 
@@ -35,10 +35,11 @@ apt-get install curl #7.58.0
 curl -sSL https://raw.githubusercontent.com/python-poetry/poetry/master/get-poetry.py | python
 
 # poetry 탭완성 활성화
-poetry help completions  
+~/.bashrc를 수정하여 poetry를 shell에서 사용 할 수 있도록 가상환경에 추가
+poetry use [사용하는 가상환경의 `python path` | 가상환경이 실행중이라면 `python`]  
 
 # repo download 후 버전 적용 (poetry.toml에 따라 적용)
-poetry update
+poetry install
 ```
 
 
@@ -101,7 +102,8 @@ roberta 모델을 사용할 경우, token type ids를 사용안하므로 tokeniz
 베이스라인은 klue/bert-base로 진행되니 이 부분의 주석을 해제하여 사용해주세요 ! 
 tokenizer는 train, validation (train.py), test(inference.py) 전처리를 위해 호출되어 사용됩니다.
 (tokenizer의 return_token_type_ids=False로 설정해주어야 함)
-
+- 학습에 필요한 파라미터를 configs directory 밑에 .json 파일로 생성하여 실험을 진행합니다.
+- 학습된 모델은 tuned_models/"model_name" directory에 bin file의 형태로 저장됩니다.
 ```
 # train_reader.py
 def prepare_train_features(examples):
@@ -123,23 +125,24 @@ def prepare_train_features(examples):
 --do_eval : Reader모델 validation flag
 ```
 
-- reader 학습 예시 (train_dataset 사용)
+- reader 학습 예시
 ```
-python train_reader.py --c ./configs/example.json --l logs/ --n ./tuned_models/train_dataset/ --do_train
+python train_reader.py -c ./configs/exp1.json -l exp1.log -n experiments1 --do_train
 ```
+    
 
-- dense retriver 학습 예시 (train_dataset 사용)
+- dense retriver 학습 예시
 ```
-python dense_retrieval_train.py --c ./configs/example.json --l logs/ --n ./tuned_models/train_dataset/ --do_train
+python train_reader.py -c ./configs/dense_exp1.json -l dense_exp1.log -n dense_experiment1 --do_train
 ```
 
 ### 4-2. 📜 eval
 
-MRC 모델의 평가는(`--do_eval`) 따로 설정해야 합니다.  위 학습 예시에 단순히 `--do_eval` 을 추가로 입력해서 훈련 및 평가를 동시에 진행할 수도 있습니다.
+MRC 모델의 성능 평가(검증)는 (`--do_eval`) 플레그를 따로 설정해야 합니다.  위 학습 예시에 단순히 `--do_eval` 을 추가로 입력해서 훈련 및 평가를 동시에 진행할 수도 있습니다.
 
 ```
-# mrc 모델 평가 (train_dataset 사용)
-python train_reader.py --c ./configs/example.json --l logs/ --n ./tuned_models/train_dataset/ --do_train
+# mrc 모델 평가 (train/validation 사용)
+python train_reader.py -c ./configs/exp1.json -l exp1.log -n experiments1 --do_train --do_eval
 ```
 
 ### 4-3. 🥕 inference
@@ -161,7 +164,7 @@ retrieval 과 mrc 모델의 학습이 완료되면 `inference.py` 를 이용해 
 ```
 
 ```
-python inference.py --c ./configs/example.json --l logs/ --n ./predictions/ -m ./tuned_models/train_dataset/ 
+python inference.py -c infer1.json -l infer1.log --n infer1_result -m ./tuned_models/train_dataset/ --do_predict
 ```
 
 ### How to submit
@@ -178,7 +181,7 @@ python inference.py --c ./configs/example.json --l logs/ --n ./predictions/ -m .
 
 ## Things to know
 
-1. `inference.py` 에서 sparse embedding 을 훈련하고 저장하는 과정은 시간이 오래 걸리지 않아 따로 argument 의 default 가 True로 설정되어 있습니다. 실행 후 sparse_embedding.bin 과 tfidfv.bin 이 저장이 됩니다. **만약 sparse retrieval 관련 코드를 수정한다면, 꼭 두 파일을 지우고 다시 실행해주세요!** 안그러면 존재하는 파일이 load 됩니다.
+1. `inference.py` 에서 TF-IDF score의 경우 sparse embedding 을 훈련하고 저장하는 과정은 시간이 오래 걸리지 않아 따로 argument 의 default 가 True로 설정되어 있습니다. 실행 후 sparse_embedding.bin 과 tfidfv.bin 이 저장이 됩니다. **만약 sparse retrieval 관련 코드를 수정한다면, 꼭 두 파일을 지우고 다시 실행해주세요!** 안그러면 존재하는 파일이 load 됩니다.
 2. 모델의 경우 `--overwrite_cache` 를 추가하지 않으면 같은 폴더에 저장되지 않습니다. 
 
 3. ./predictions/ 폴더 또한 `--overwrite_output_dir` 을 추가하지 않으면 같은 폴더에 저장되지 않습니다.
