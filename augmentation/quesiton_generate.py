@@ -2,8 +2,9 @@
 # import modules #
 ##################
 
-import os
+import os, sys, getopt
 import json
+import random
 import pandas as pd
 from tqdm import tqdm
 from pororo import Pororo
@@ -19,12 +20,15 @@ os.environ["TOKENIZERS_PARALLELISM"] = "true"
 # Class & Functions #
 #####################
 
-def load_data(wiki_data_path : str):
+def load_data(wiki_data_path : str, run_mode : str = 'title'):
     """
     Arguments:
         wiki_data_path(str):
         - wiki json 파일의 경로입니다.
         - arugments.py의 wiki_data_path에서 가져올 예정입니다.
+        run_mode(str):
+        - answer로 활용할 데이터를 선택하는 파라미터입니다.
+        - 기본값은 'title'이며, ner 태깅을 활용하려면 'ner'을 입력합니다.
 
     Returns:
         - wiki_df -> pd.DataFrame: [description]
@@ -39,7 +43,20 @@ def load_data(wiki_data_path : str):
     wiki_df = pd.DataFrame.from_dict(wiki, orient='index')
     wiki_df['document_id'] = 'wiki-'+ wiki_df['document_id'].astype("string")
 
-    answers = wiki_df['title'].to_list()
+    if mode == 'ner':
+        ner = Pororo(task="ner", lang="ko")
+        answers = []
+        for context in contexts:
+            try:
+                tagged_ner = ner(context)
+                tagged_ner = [(word, entity) for word, entity in tagged_ner if entity != 'O']
+                answer = random.choice(tagged_ner)[0]
+                answers.append(answer)
+            except:
+                answers.append('') # 추후 data 전처리로 제거.
+    else:
+        answers = wiki_df['title'].to_list()
+
     contexts = wiki_df['text'].to_list()
     doc_id = wiki_df['document_id'].to_list()
 
@@ -62,8 +79,11 @@ def save_data(value_dic: Dict, output_path: str):
     wiki_qg_df.to_csv(output_path,index=False)
 
 
-def question_generation():
+def question_generation(run_mode: str):
     """
+    Arguments:
+        run_mode(str):
+        - load_data() 함수에 필요한 파라미터
     Summary:
         wiki data에서 context와 title을 불러와 이를 pororo의 QG를 활용해 Question을 만들어낸 후 
         doc_id, context, answer, question이 담긴 csv파일을 저장한다.
@@ -72,7 +92,7 @@ def question_generation():
     """
     parser = HfArgumentParser(QuestionGenerationArguments)
     wiki_data_path = parser.wiki_data_path
-    answers, contexts, doc_id = load_data(wiki_data_path)
+    answers, contexts, doc_id = load_data(wiki_data_path, run_mode)
     full_length = len(contexts) 
     batch_size = parser.qg_batch_size
     batch_num = int(full_length/batch_size)
@@ -113,4 +133,25 @@ def question_generation():
 
 
 if __name__ == "__main__":
-    question_generation()
+    file_name = sys.argv[0] # 실행시키는 파일명
+    run_mode = "title"  # running mode title(default) / ner
+
+    try:
+        print(argv[1:])
+        opts, etc_args = getopt.getopt(argv[1:], "hc:", ["help", "mode="])
+    except getopt.GetoptError:
+        print(file_name, "-c <mode>")
+        sys.exit(2)
+
+    for opt, arg in opts:
+        if opt in ("-h", "--help"):
+            print(file_name, "-m <mode>")
+            sys.exit(0)
+        elif opt in ("-m", "--mode"):
+            run_mode = arg
+
+    if run_mode not in ['title', 'ner']:
+        raise Exception('not expected args...')
+
+    print(f"generate question with {run_mode}")
+    question_generation(run_mode)
