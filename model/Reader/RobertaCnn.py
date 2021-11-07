@@ -2,27 +2,21 @@
 # import modules #
 ##################
 
-from transformers import AutoConfig, AutoModelForSequenceClassification, RobertaModel
+from transformers import RobertaModel
 from transformers.file_utils import (
-    add_code_sample_docstrings,
     add_start_docstrings_to_model_forward,
 )
 from transformers.modeling_outputs import QuestionAnsweringModelOutput
 from transformers.models.roberta.modeling_roberta import (
-    _CHECKPOINT_FOR_DOC,
-    _CONFIG_FOR_DOC,
-    _TOKENIZER_FOR_DOC,
     ROBERTA_INPUTS_DOCSTRING,
     RobertaPreTrainedModel,
 )
-import torch
 import torch.nn as nn
 from torch.nn import CrossEntropyLoss
-from torch.utils.data import Sampler
 
-#######################
-# functions & classes #
-#######################
+######################
+# Classes & Funtions #
+######################
 
 
 class CnnHead(nn.Module):
@@ -40,7 +34,6 @@ class CnnHead(nn.Module):
         self.relu = nn.ReLU()
 
     def forward(self, x):
-        # print(x)
         x = x.transpose(1, 2).contiguous()
         conv1_out = self.relu(self.conv_1(x).transpose(1, 2).contiguous().squeeze(-1))
         conv3_out = self.relu(self.conv_3(x).transpose(1, 2).contiguous().squeeze(-1))
@@ -50,7 +43,7 @@ class CnnHead(nn.Module):
         return x
 
 
-class MyRobertaForQuestionAnswering(RobertaPreTrainedModel):
+class RobertaCNNForQuestionAnswering(RobertaPreTrainedModel):
     _keys_to_ignore_on_load_missing = [r"position_ids"]
 
     def __init__(self, config):
