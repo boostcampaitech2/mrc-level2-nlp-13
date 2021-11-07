@@ -1,8 +1,10 @@
-# Readme
+# KLUE Machine Reading Comprehension _ Naver B.camp AI 2nd
 
-## 소개
+## Project Abstract
 
-P stage 3 대회를 위한 베이스라인 코드 
+✋ KLUE MRC(Machine Reading Comprehension) Dataset으로 주어진 질문에 대한 문서 검색 후 답변 추출하는 Task.
+✋ 
+✋ 팀 제출 하루 10회로 제한하였기에, 정확한
 
 ## 설치 방법
 
@@ -21,18 +23,6 @@ bash ./install/install_requirements.sh
 
 ### 저장소 구조
 
-```bash
-./assets/                # readme 에 필요한 이미지 저장
-./install/               # 요구사항 설치 파일 
-./data/                  # 전체 데이터. 아래 상세 설명
-retrieval.py             # sparse retreiver 모듈 제공 
-arguments.py             # 실행되는 모든 argument가 dataclass 의 형태로 저장되어있음
-trainer_qa.py            # MRC 모델 학습에 필요한 trainer 제공.
-utils_qa.py              # 기타 유틸 함수 제공 
-
-train.py                 # MRC, Retrieval 모델 학습 및 평가 
-inference.py		     # ODQA 모델 평가 또는 제출 파일 (predictions.json) 생성
-```
 
 ## 데이터 소개
 
