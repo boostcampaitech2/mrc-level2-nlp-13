@@ -84,6 +84,7 @@ def main():
         inference_config_setting(config)
 
     training_args.do_train = True
+    training_args.do_predict = config.do_predict
 
     logger = get_logger("logs/inference.log")
 
