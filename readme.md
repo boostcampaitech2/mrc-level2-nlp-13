@@ -6,6 +6,8 @@
 
 ✋ Retriver 를 통해  wikipedia에서 Top-k 문서를 불러오고, Reader를 통해 문서 내 답변은 추출한다.
 
+✋ 1일 팀 제출횟수는 10회로 제한되었습니다.
+
 
 ## 2. 설치 방법
 
@@ -14,13 +16,11 @@
 ```
 # data (51.2 MB)
 tar -xzf data.tar.gz
-
 ```
 
 👉 해당 레포 다운로드
 ```
 git clone https://github.com/boostcampaitech2/mrc-level2-nlp-13.git
-
 ```
 
 👉 Poetry를 통한 패키지 버전 관리 
@@ -37,11 +37,10 @@ poetry help completions
 
 # repo download 후 버전 적용 (poetry.toml에 따라 적용)
 poetry update
-
 ```
 
 
-## 3. 프로젝트 구조
+## 3. 🏗️ 프로젝트 구조
 ### 3-1. 저장소 구조
 ```
 mrc-level2-nlp-13
@@ -75,7 +74,7 @@ mrc-level2-nlp-13
     ├── logger.py
     └── utils_qa.py
 ```
-### 3-2.데이터 구조
+### 3-2.데이터 구조 
 
 아래는 제공하는 데이터셋의 분포를 보여줍니다.
 
@@ -94,7 +93,7 @@ config 내 "data_args" 를 변경해주시면 됩니다.
 
 
 ## 4. train, evaluation , inference
-### 4-1. train
+### 4-1. 🚆 train
 
 roberta 모델을 사용할 경우, token type ids를 사용안하므로 tokenizer 사용시 아래 함수의 옵션을 수정해야합니다.
 베이스라인은 klue/bert-base로 진행되니 이 부분의 주석을 해제하여 사용해주세요 ! 
@@ -120,17 +119,19 @@ def prepare_train_features(examples):
 -n ,--model_name : 모델이 저장될 디렉토리 이름
 --do_train : Reader모델 train flag
 --do_eval : Reader모델 validation flag
+```
 
-# reader 학습 예시 (train_dataset 사용)
+- reader 학습 예시 (train_dataset 사용)
+```
 python train_reader.py --c ./configs/example.json --l logs/ --n ./tuned_models/train_dataset/ --do_train
 ```
 
+- dense retriver 학습 예시 (train_dataset 사용)
 ```
-# dense retriver 학습 예시 (train_dataset 사용)
-python 
+python dense_retrieval_train.py --c ./configs/example.json --l logs/ --n ./tuned_models/train_dataset/ --do_train
 ```
 
-### 4-2. eval
+### 4-2. 📜 eval
 
 MRC 모델의 평가는(`--do_eval`) 따로 설정해야 합니다.  위 학습 예시에 단순히 `--do_eval` 을 추가로 입력해서 훈련 및 평가를 동시에 진행할 수도 있습니다.
 
@@ -139,7 +140,7 @@ MRC 모델의 평가는(`--do_eval`) 따로 설정해야 합니다.  위 학습 
 python train_reader.py --c ./configs/example.json --l logs/ --n ./tuned_models/train_dataset/ --do_train
 ```
 
-### 4-3. inference
+### 4-3. 🥕 inference
 
 retrieval 과 mrc 모델의 학습이 완료되면 `inference.py` 를 이용해 odqa 를 진행할 수 있습니다.
 
@@ -148,7 +149,6 @@ retrieval 과 mrc 모델의 학습이 완료되면 `inference.py` 를 이용해 
 * 학습한 모델이 train_dataset 대해서 ODQA 성능이 어떻게 나오는지 알고 싶다면 평가(--do_eval)를 진행하면 됩니다.
 
 ```
-
 # ODQA 실행 (test_dataset 사용)
 # wandb 가 로그인 되어있다면 자동으로 결과가 wandb 에 저장됩니다. 아니면 단순히 출력됩니다
 # inference argparser
@@ -156,7 +156,9 @@ retrieval 과 mrc 모델의 학습이 완료되면 `inference.py` 를 이용해 
 -l ,--log_file_path : inference logging을 할 파일 이름
 -n ,--inference_name : inference 결과가 저장될 디렉토리 이름
 -m , --model_name_or_path : inference에 사용할 모델 디렉토리의 이름
+```
 
+```
 python inference.py --c ./configs/example.json --l logs/ --n ./predictions/ -m ./tuned_models/train_dataset/ 
 ```
 
@@ -166,8 +168,10 @@ python inference.py --c ./configs/example.json --l logs/ --n ./predictions/ -m .
 ### MRC 모델 학습 결과
 다음은 MRC 모델의 public & private datset에 대한 결과를 보여줍니다.
 
+- Public 19팀 중 9등 🥈
 ![Public 🥈](./images/public.png)
 
+- Private 19팀 중 7등 🥈
 ![Private 🥈](./images/private.png)
 
 ## Things to know
