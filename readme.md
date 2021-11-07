@@ -1,4 +1,6 @@
-# KLUE Machine Reading Comprehension _ Naver B.camp AI 2nd
+# KLUE Machine Reading Comprehension 
+- 🍀 Naver Boost camp AI tech 2nd , Team CLUE 
+- 📎 [Wrap-up report](https://jonhyuk0922.notion.site/_level2_-MRC_13-7bdc5e677ff84b29ad52003f473fe625) , 🖇️ [presentation slide](https://docs.google.com/presentation/d/1vLpOJDt0f3Rpaq3w6BbKD4yMfvlWzpE_1852N1NBt50/edit?usp=sharing)
 
 ## 1.Project Abstract
 
