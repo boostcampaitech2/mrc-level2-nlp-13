@@ -1,15 +1,12 @@
-"""
-Open-Domain Question Answering 을 수행하는 inference 코드 입니다.
 
-대부분의 로직은 train.py 와 비슷하나 retrieval, predict 부분이 추가되어 있습니다.
-"""
+##################
+# Import modules #
+##################
 
-
-import logging
-import sys
 from typing import Callable, List, Dict, NoReturn, Tuple, Optional
-
 import numpy as np
+import os
+import argparse
 
 from datasets import (
     load_metric,
@@ -30,80 +27,103 @@ from transformers import (
     TrainingArguments,
     set_seed,
 )
-from Custom import MyRobertaForQuestionAnswering
+from model.Reader.RobertaCnn import RobertaCNNForQuestionAnswering
+from utils.utils_qa import postprocess_qa_predictions, check_no_error
+from model.Reader.trainer_qa import QuestionAnsweringTrainer
+from model.Retrieval.retrieval import DenseRetrieval, SparseRetrieval, JointRetrieval
 
-import torch
-from utils_qa import postprocess_qa_predictions, check_no_error
-from trainer_qa import QuestionAnsweringTrainer
-from retrieval import DenseRetrieval, SparseRetrieval, JointRetrieval
-
-from arguments import (
+from utils.arguments import (
     ModelArguments,
-    DataTrainingArguments,
-    DenseTrainingArguments
+    DataArguments,
+    DenseTrainingArguments,
+
+    inference_config_setting,
+    wandb_config_setting,
+    
+    INFERENCE_DIR,
+    CONFIG_DIR,
+    LOG_DIR,
 )
+from utils.logger import get_logger
 
 
-logger = logging.getLogger(__name__)
+########################
+# Set global variables #
+########################
 
+logger = None
+CUSTOM_MODEL_NAMES = {
+    "RobertaCnn":RobertaCNNForQuestionAnswering,
+}
+
+#######################
+# Classes & Functions #
+#######################
 
 def main():
-    # 가능한 arguments 들은 ./arguments.py 나 transformer package 안의 src/transformers/training_args.py 에서 확인 가능합니다.
-    # --help flag 를 실행시켜서 확인할 수 도 있습니다.
+    
+    global logger
 
-    parser = HfArgumentParser(
-        (ModelArguments, DataTrainingArguments, DenseTrainingArguments, TrainingArguments)
-    )
-    model_args, data_args, dense_args, training_args = parser.parse_args_into_dataclasses()
+    # Load config json
+    parser = argparse.ArgumentParser()
+    parser.add_argument("-c", "--config_file_path", help="Configure Json path")
+    parser.add_argument("-l", "--log_file_path", default="reader_train.log", help="Logger file path")
+    parser.add_argument("-n", "--inference_name", default=None, help="Inference file directory name")
+    parser.add_argument("-m", "--model_name_or_path", default=None, help="Reader model path for inference")
+    parser.add_argument("--do_predict",action="store_true")
+    
+    config = parser.parse_args()
+
+    assert config.inference_name, "Output 파일 이름을 설정해 주세요"
+
+    config.config_file_path = os.path.join(CONFIG_DIR, config.config_file_path) 
+    config.log_file_path = os.path.join(LOG_DIR, config.log_file_path)
+    config.inference_name = os.path.join(INFERENCE_DIR, config.inference_name)
+
+    model_args, data_args, dense_args, training_args =\
+        inference_config_setting(config)
 
     training_args.do_train = True
+    training_args.do_predict = config.do_predict
 
-    print(f"model is from {model_args.model_name_or_path}")
-    print(f"data is from {data_args.dataset_name}")
+    logger = get_logger("logs/inference.log")
 
-    # logging 설정
-    logging.basicConfig(
-        format="%(asctime)s - %(levelname)s - %(name)s -   %(message)s",
-        datefmt="%m/%d/%Y %H:%M:%S",
-        handlers=[logging.StreamHandler(sys.stdout)],
-    )
-
-    # verbosity 설정 : Transformers logger의 정보로 사용합니다 (on main process only)
+    logger.info(f"model is from {model_args.model_name_or_path}")
+    logger.info(f"data is from {data_args.dataset_name}")
     logger.info("Training/evaluation parameters %s", training_args)
 
-    # 모델을 초기화하기 전에 난수를 고정합니다.
+    # Set random seed
     set_seed(training_args.seed)
 
     datasets = load_from_disk(data_args.dataset_name)
-    print(datasets)
+    logger.info(datasets)
 
-    # AutoConfig를 이용하여 pretrained model 과 tokenizer를 불러옵니다.
-    # argument로 원하는 모델 이름을 설정하면 옵션을 바꿀 수 있습니다.
+    # Load Config & tokenizer
     config = AutoConfig.from_pretrained(
-        model_args.config_name
-        if model_args.config_name
-        else model_args.model_name_or_path,
-    )
+            model_args.config_name
+            if model_args.config_name is not None
+            else model_args.model_name_or_path,
+        )
+
     tokenizer = AutoTokenizer.from_pretrained(
         model_args.tokenizer_name
-        if model_args.tokenizer_name
+        if model_args.tokenizer_name is not None
         else model_args.model_name_or_path,
         use_fast=True,
     )
 
-    model = MyRobertaForQuestionAnswering.from_pretrained(
-        model_args.model_name_or_path,
-        config=config,
-    )
-
-    # model = AutoModelForQuestionAnswering.from_pretrained(
-    #     model_args.model_name_or_path,
-    #     config=config,
-    # )
-
-    # model = MyRobertaForQuestionAnswering.from_config(config)
-    # state_d = torch.load(model_args.model_name_or_path)
-    # model.load_state_dict(state_d)
+    # Load Model
+    if model_args.model_name_or_path in CUSTOM_MODEL_NAMES:
+        model = CUSTOM_MODEL_NAMES[model_args.model_name_or_path].from_pretrained(
+            model_args.model_name_or_path,
+            config=config,
+        )
+    else:
+        model = AutoModelForQuestionAnswering.from_pretrained(
+            model_args.model_name_or_path,
+            from_tf=bool(".ckpt" in model_args.model_name_or_path),
+            config=config,
+        )
 
     # True일 경우 : run passage retrieval
     if data_args.eval_retrieval:
@@ -139,7 +159,7 @@ def run_joint_retrieval(
     datasets: DatasetDict,
     training_args: TrainingArguments,
     dense_args: DenseTrainingArguments,
-    data_args: DataTrainingArguments,
+    data_args: DataArguments,
     data_path: str = "../data",
     context_path: str = "wikipedia_documents.json",
     embedding_form : Optional[str] = "BM25"
@@ -197,7 +217,7 @@ def run_sparse_retrieval(
     tokenize_fn: Callable[[str], List[str]],
     datasets: DatasetDict,
     training_args: TrainingArguments,
-    data_args: DataTrainingArguments,
+    data_args: DataArguments,
     data_path: str = "../data",
     context_path: str = "wikipedia_documents.json",
 ) -> DatasetDict:
@@ -253,7 +273,7 @@ def run_sparse_retrieval(
 def run_dense_retrieval(
     datasets: DatasetDict,
     training_args: TrainingArguments,
-    data_args: DataTrainingArguments,
+    data_args: DataArguments,
     dense_args: DenseTrainingArguments,
     data_path: str = "./data",
     context_path: str = "wikipedia_documents.json",
@@ -308,7 +328,7 @@ def run_dense_retrieval(
     return datasets
 
 def run_mrc(
-    data_args: DataTrainingArguments,
+    data_args: DataArguments,
     training_args: TrainingArguments,
     model_args: ModelArguments,
     datasets: DatasetDict,
@@ -426,8 +446,8 @@ def run_mrc(
     def compute_metrics(p: EvalPrediction) -> Dict:
         return metric.compute(predictions=p.predictions, references=p.label_ids)
 
-    print("init trainer...")
-    # print(model)
+    logger.info("init trainer...")
+    # logger.info(model)
     # exit(0)
     # Trainer 초기화
     trainer = QuestionAnsweringTrainer(
@@ -452,7 +472,7 @@ def run_mrc(
         )
 
         # predictions.json 은 postprocess_qa_predictions() 호출시 이미 저장됩니다.
-        print(
+        logger.info(
             "No metric can be presented because there is no correct answer given. Job done!"
         )
 

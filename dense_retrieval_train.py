@@ -1,5 +1,9 @@
-from retrieval_module.utills import *
-from retrieval_module.retrieval_dataset import *
+##################
+# Import modules #
+##################
+
+from utils.dense_utils.utils import *
+from utils.dense_utils.retrieval_dataset import *
 
 from transformers import AutoTokenizer
 from transformers import AdamW, get_linear_schedule_with_warmup
@@ -10,14 +14,25 @@ import torch
 import torch.nn.functional as F
 from torch.utils.data import DataLoader
 
-from arguments import (
-    DenseTrainingArguments,
-    CustomArguments
-)
 
+from utils.arguments import (
+    DenseTrainingArguments,
+    CustomArguments,
+    config_setting_for_dense_retrieval
+)
+from utils.logger import get_logger
 from tqdm import trange, tqdm
-from utills.utills import config_setting_for_dense_retrieval
 import wandb
+
+########################
+# Set global variables #
+########################
+
+logger = get_logger("logs/dense-retrieval.log")
+
+#######################
+# Classes & Functions #
+#######################
 
 def train(tokenizer: AutoTokenizer, 
         q_encoder: RobertaModel, 
@@ -48,7 +63,8 @@ def train(tokenizer: AutoTokenizer,
         Note:
             Dense retrieval 학습을 진행하고, top1~top100 acc를 로깅
     '''
-    print('Start train!!')
+    
+    logger.info('Start train!!')
     device = 'cuda:0' if torch.cuda.is_available() else 'cpu'
   
     q_encoder.zero_grad()
@@ -69,7 +85,7 @@ def train(tokenizer: AutoTokenizer,
         top_1_acc, top_3_acc, top_10_acc, top_35_acc, top_100_acc = valid_per_epoch(tokenizer, p_encoder, q_encoder, valid_context, valid_question, dense_args)
 
         # logging
-        print(f'epoch: {epoch} | train_loss:{train_loss:.5f} | '
+        logger.info(f'epoch: {epoch} | train_loss:{train_loss:.5f} | '
               f'top-1 acc: {top_1_acc:.2f} | '
               f'top-3 acc: {top_3_acc:.2f} | '
               f'top-10 acc: {top_10_acc:.2f} | '
@@ -81,7 +97,7 @@ def train(tokenizer: AutoTokenizer,
         # 에폭 단위 저장       
         q_encoder.save_pretrained(f'{dense_args.dense_train_output_dir}/{epoch}ep/q_encoder')
         p_encoder.save_pretrained(f'{dense_args.dense_train_output_dir}/{epoch}ep/p_encoder')
-        print(f'{epoch} saved!')
+        logger.info(f'{epoch} saved!')
 
         wandb.log({
             'epoch': epoch,
@@ -98,22 +114,22 @@ def train(tokenizer: AutoTokenizer,
             best_metric_top_1 = top_1_acc
             q_encoder.save_pretrained(f'{dense_args.dense_train_output_dir}/best/q_encoder')
             p_encoder.save_pretrained(f'{dense_args.dense_train_output_dir}/best/p_encoder')
-            print('best top-1 saved!')
+            logger.info('best top-1 saved!')
         elif top_3_acc > best_metric_top_3:
             best_metric_top_3 = top_3_acc
             q_encoder.save_pretrained(f'{dense_args.dense_train_output_dir}/best/q_encoder')
             p_encoder.save_pretrained(f'{dense_args.dense_train_output_dir}/best/p_encoder')
-            print('best top-3 saved!')
+            logger.info('best top-3 saved!')
         elif top_10_acc > best_metric_top_10:
             best_metric_top_10 = top_10_acc
             q_encoder.save_pretrained(f'{dense_args.dense_train_output_dir}/best/q_encoder')
             p_encoder.save_pretrained(f'{dense_args.dense_train_output_dir}/best/p_encoder')
-            print('best top-10 saved!')
+            logger.info('best top-10 saved!')
         elif top_35_acc > best_metric_top_35:
             best_metric_top_35 = top_35_acc
             q_encoder.save_pretrained(f'{dense_args.dense_train_output_dir}/best/q_encoder')
             p_encoder.save_pretrained(f'{dense_args.dense_train_output_dir}/best/p_encoder')
-            print('best top-35 saved!')
+            logger.info('best top-35 saved!')
 
 def train_per_epoch(
         q_encoder: RobertaModel, 
@@ -199,7 +215,7 @@ def valid_per_epoch(
         Note:
             validation을 진행한 후 top-k acc 들을 반환
     '''
-    print(f'Valid start!')
+    logger.info(f'Valid start!')
     with torch.no_grad():
         p_encoder.eval()
 
@@ -253,16 +269,16 @@ def main():
         wandb.init(project=cus_args.project_name, entity=cus_args.entity_name, name=cus_args.wandb_run_name, config=config)
 
     # tokenizer 준비
-    print('Loading tokenizer')
+    logger.info('Loading tokenizer')
     tokenizer = AutoTokenizer.from_pretrained(dense_args.dense_base_model)
-    print(tokenizer)
+    logger.info(tokenizer)
 
     # 학습 및 검증 데이터 준비
-    print('Loading data')
+    logger.info('Loading data')
     train_dataloader, valid_context, valid_question = prepare_data(tokenizer, dense_args)
  
     # 모델 준비
-    print('Loading models')
+    logger.info('Loading models')
     no_decay = ['bias', 'LayerNorm.weight']
     p_encoder = RobertaModel.from_pretrained(dense_args.dense_base_model)
     if dense_args.dense_mode == 'single':

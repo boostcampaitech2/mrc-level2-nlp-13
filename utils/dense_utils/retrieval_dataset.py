@@ -1,9 +1,14 @@
-import re
-import torch
-import torch.nn as nn
-from torch.utils.data import Dataset
 
-from transformers import BertPreTrainedModel, BertModel, RobertaModel, RobertaConfig, RobertaPreTrainedModel
+##################
+# Import modules #
+##################
+
+from torch.utils.data import Dataset
+from transformers import RobertaModel, RobertaPreTrainedModel
+
+#######################
+# Classes & Functions #
+#######################
 
 class RetrievalTrainDataset(Dataset):
     def __init__(self, input_ids, attention_mask, q_input_ids, q_attention_mask):
