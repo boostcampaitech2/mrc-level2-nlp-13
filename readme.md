@@ -167,10 +167,10 @@ retrieval 과 mrc 모델의 학습이 완료되면 `inference.py` 를 이용해 
 python inference.py -c infer1.json -l infer1.log --n infer1_result -m ./tuned_models/train_dataset/ --do_predict
 ```
 
-### How to submit
+### 4-4. How to submit
 `inference.py` 파일을 위 예시처럼 `--do_predict` 으로 실행하면 `--inference_name` 위치에 `predictions.json` 이라는 파일이 생성됩니다. 해당 파일을 제출해주시면 됩니다.
 
-### MRC 모델 학습 결과
+### 4-5. MRC 모델 학습 결과
 다음은 MRC 모델의 public & private datset에 대한 결과를 보여줍니다.
 
 - Public 19팀 중 9등 🥈
@@ -179,9 +179,17 @@ python inference.py -c infer1.json -l infer1.log --n infer1_result -m ./tuned_mo
 - Private 19팀 중 7등 🥈
 ![Private 🥈](./images/private.png)
 
-## Things to know
+
+## 5. Things to know
 
 1. `inference.py` 에서 TF-IDF score의 경우 sparse embedding 을 훈련하고 저장하는 과정은 시간이 오래 걸리지 않아 따로 argument 의 default 가 True로 설정되어 있습니다. 실행 후 sparse_embedding.bin 과 tfidfv.bin 이 저장이 됩니다. **만약 sparse retrieval 관련 코드를 수정한다면, 꼭 두 파일을 지우고 다시 실행해주세요!** 안그러면 존재하는 파일이 load 됩니다.
 2. 모델의 경우 `--overwrite_cache` 를 추가하지 않으면 같은 폴더에 저장되지 않습니다. 
 
 3. ./predictions/ 폴더 또한 `--overwrite_output_dir` 을 추가하지 않으면 같은 폴더에 저장되지 않습니다.
+
+
+## 6. License
+
+This work is licensed under a <a rel="license" href="http://creativecommons.org/licenses/by-sa/4.0/">Creative Commons Attribution-ShareAlike 4.0 International License</a>.
+
+<a rel="license" href="http://creativecommons.org/licenses/by-sa/4.0/"><img alt="Creative Commons License" style="border-width:0" src="https://i.creativecommons.org/l/by-sa/4.0/88x31.png" /></a><br />
