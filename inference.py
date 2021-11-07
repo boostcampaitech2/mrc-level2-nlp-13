@@ -74,7 +74,7 @@ def main():
     
     config = parser.parse_args()
 
-    assert config.model_name, "Output 파일 이름을 설정해 주세요"
+    assert config.inference_name, "Output 파일 이름을 설정해 주세요"
 
     config.config_file_path = os.path.join(CONFIG_DIR, config.config_file_path) 
     config.log_file_path = os.path.join(LOG_DIR, config.log_file_path)
