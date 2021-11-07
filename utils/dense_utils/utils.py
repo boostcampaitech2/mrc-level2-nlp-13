@@ -1,3 +1,8 @@
+
+##################
+# Import modules #
+##################
+
 from typing import *
 import numpy as np
 from tqdm import tqdm
@@ -7,8 +12,11 @@ from datasets import load_from_disk
 
 from torch.utils.data import Dataset
 from torch.utils.data import (DataLoader, RandomSampler, TensorDataset)
-from arguments import (
-    DenseTrainingArguments)
+from utils.arguments import DenseTrainingArguments
+
+#######################
+# Classes & Functions #
+#######################
 
 def prepare_train_features_for_retriever(
     examples: Dataset, 
@@ -100,8 +108,7 @@ def prepare_train_features_for_retriever(
                 tokenized_examples["labels"].append(0)
     return tokenized_examples
 
-def prepare_data(tokenizer, 
-            dense_args: DenseTrainingArguments):
+def prepare_data(tokenizer, dense_args: DenseTrainingArguments):
     '''
         Arguments:
             tokenizer 
