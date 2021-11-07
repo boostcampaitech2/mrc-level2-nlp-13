@@ -22,7 +22,39 @@ bash ./install/install_requirements.sh
 
 
 ### 저장소 구조
-
+mrc-level2-nlp-13
+├── .gitignore
+├── .pre-commit-config.yaml
+├── Custom.py
+├── __pycache__
+│   ├── arguments.cpython-38.pyc
+│   ├── custom_train.cpython-38.pyc
+│   ├── retrieval.cpython-38.pyc
+│   ├── trainer_qa.cpython-38.pyc
+│   └── utils_qa.cpython-38.pyc
+├── arguments.py
+├── assets
+│   └── dataset.png
+├── custom_trainer.py
+├── dense_retrieval_train.py
+├── ensemble
+│   ├── hard_vote.ipynb
+│   └── many.json
+├── inference.py
+├── poetry.lock
+├── post_preprocessing.ipynb
+├── pyproject.toml
+├── quesiton_generate.py
+├── readme.md
+├── retrieval.py
+├── retrieval_module
+│   ├── retrieval_dataset.py
+│   └── utills.py
+├── train.py
+├── trainer_qa.py
+├── utills
+│   └── utills.py
+└── utils_qa.py
 
 ## 데이터 소개
 
