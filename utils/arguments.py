@@ -7,6 +7,7 @@ from transformers import TrainingArguments
 from typing import Any, Dict, List, Optional
 import json
 import wandb
+import os
 
 ########################
 # Set global variables #
@@ -17,9 +18,16 @@ INFERENCE_DIR = "predictions/"
 CONFIG_DIR = "configs/"
 LOG_DIR = "logs/"
 
+check_dir_exist()
+
 #######################
 # Classes & Functions #
 #######################
+
+def check_dir_exist():
+    for dir in [MODEL_DIR, INFERENCE_DIR, CONFIG_DIR, LOG_DIR]:
+        if not os.path.exist(dir):
+            os.mkdir(dir)
 
 def get_info(config_json_path : str):
     with open(config_json_path, "r") as file:
