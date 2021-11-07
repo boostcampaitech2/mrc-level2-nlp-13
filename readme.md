@@ -22,6 +22,7 @@ bash ./install/install_requirements.sh
 
 
 ### 저장소 구조
+```
 mrc-level2-nlp-13
 ├── .gitignore
 ├── .pre-commit-config.yaml
@@ -55,7 +56,7 @@ mrc-level2-nlp-13
 ├── utills
 │   └── utills.py
 └── utils_qa.py
-
+```
 ## 데이터 소개
 
 아래는 제공하는 데이터셋의 분포를 보여줍니다.
